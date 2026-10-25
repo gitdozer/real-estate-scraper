@@ -1,0 +1,32 @@
+# Parametri di esecuzione dello scraper.
+# Ogni valore può essere sovrascritto da riga di comando (vedi docs/runbook.md).
+
+# --- Rete ---
+site_concurrency: 6          # richieste contemporanee verso il sito degli annunci
+image_concurrency: 8         # richieste contemporanee verso il server delle foto
+max_retries: 4               # tentativi massimi per richiesta (errori di rete, 5xx, 429)
+timeout_s: 30.0              # timeout di una singola richiesta, in secondi
+error_window: 200            # richieste considerate per misurare il tasso di errori
+error_threshold: 0.2         # oltre questo tasso di errori la concorrenza si dimezza
+
+# --- Dettagli e foto ---
+rotation_days: 7             # ogni annuncio riceve un dettaglio aggiornato almeno ogni N giorni
+photos_new: 6                # foto con impronta per gli annunci nuovi
+photos_backlog: 3            # foto con impronta per gli annunci arretrati (es. bootstrap)
+max_photos_per_run: 30000    # tetto di foto scaricate in un run
+
+# --- Controlli di qualità ---
+completeness_min: 0.97       # quota minima di annunci raccolti rispetto al totale dichiarato dal sito
+small_segment_threshold: 50  # sotto questo totale dichiarato si usa una soglia assoluta...
+small_segment_max_missing: 2 # ...cioè al massimo questi annunci mancanti
+active_drop_alert: 0.05      # allarme se gli annunci attivi calano più di questa quota rispetto al run precedente
+delisted_recheck_days: 7     # ogni quanti giorni ricontrollare il dettaglio di un annuncio "delisted"
+
+# --- Conservazione ---
+raw_retention_days: 90       # giorni di conservazione dell'HTML grezzo
+state_history_days: 30       # giorni di conservazione delle copie dello stato
+
+# --- Esecuzione ---
+max_runtime_minutes: 100     # durata massima del run; il lavoro non fatto passa al giorno dopo
+full_details: false          # true = scarica il dettaglio di tutti gli annunci
+max_pages: 0                 # 0 = tutte le pagine; >0 solo per test (blocca le scomparse)

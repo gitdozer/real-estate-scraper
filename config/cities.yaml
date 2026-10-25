@@ -1,0 +1,13 @@
+# Comuni da raccogliere.
+# Per aggiungere un comune basta una riga: nome, codice ISTAT (6 cifre),
+# slug usato da ciascuna fonte nell'URL, contratti da raccogliere.
+# Codici ISTAT verificati il 2026-10-25.
+cities:
+  - {name: Milano,        istat: "015146", slugs: {trovacasa: milano},        contracts: [vendita, affitto]}
+  - {name: Busto Arsizio, istat: "012026", slugs: {trovacasa: busto-arsizio}, contracts: [vendita, affitto]}
+  - {name: Gallarate,     istat: "012070", slugs: {trovacasa: gallarate},     contracts: [vendita, affitto]}
+  - {name: Monza,         istat: "108033", slugs: {trovacasa: monza},         contracts: [vendita, affitto]}
+  - {name: Legnano,       istat: "015118", slugs: {trovacasa: legnano},       contracts: [vendita, affitto]}
+  - {name: Gorla Minore,  istat: "012079", slugs: {trovacasa: gorla-minore},  contracts: [vendita, affitto]}
+  - {name: Marnate,       istat: "012098", slugs: {trovacasa: marnate},       contracts: [vendita, affitto]}
+  - {name: Castellanza,   istat: "012042", slugs: {trovacasa: castellanza},   contracts: [vendita, affitto]}
