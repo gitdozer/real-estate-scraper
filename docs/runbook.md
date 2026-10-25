@@ -2,6 +2,32 @@
 
 Tutti i comandi si lanciano dalla cartella principale del repository.
 
+## Configurazione iniziale (una volta)
+
+### 1. Cloudflare R2
+
+1. Nel pannello Cloudflare: **R2 Object Storage** → attivare R2 (può essere richiesto un metodo di pagamento; il piano gratuito include 10 GB).
+2. **Create bucket**, es. `real-estate-data`, posizione automatica. Lasciarlo **privato** (nessun accesso pubblico).
+3. **Manage R2 API Tokens** → **Create API token**: permesso **Object Read & Write**, limitato al **solo bucket** creato. Annotare *Access Key ID*, *Secret Access Key* e l'*Account ID* (visibile nella pagina R2).
+4. Facoltativo ma consigliato: impostare un avviso di fatturazione a 1 €.
+
+### 2. GitHub
+
+1. Creare il repository (pubblico, vedi [decisioni/0003](decisioni/0003-github-actions-r2.md)) e fare push del branch `main`.
+2. **Settings → Secrets and variables → Actions → New repository secret**, quattro secrets:
+   `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`.
+3. I workflow sono in `.github/workflows/`: `Test` (a ogni push) e `Raccolta giornaliera` (ogni notte alle 02:17 UTC + avvio manuale da **Actions → Raccolta giornaliera → Run workflow**).
+
+### 3. Primo avvio (bootstrap)
+
+In quest'ordine:
+
+1. **Import dello storico** da locale verso R2 (vedi "Importare lo storico" sotto), con le 4 variabili `R2_*` impostate nel terminale.
+2. **Prova da GitHub su due comuni piccoli**: Run workflow con `cities = gorla-minore,marnate`. Verificare nel riepilogo che i segmenti siano completi e che non ci siano errori. **Se compaiono 403 o `circuit_open`**, trovacasa blocca gli IP di GitHub: fermarsi e passare al piano B (in fondo).
+3. **Bootstrap completo**: Run workflow con `max_runtime_minutes = 340` e gli altri campi vuoti. Scarica i dettagli di tutti i ~38.000 annunci e le prime impronte delle foto (circa 1–2 ore). Le impronte mancanti vengono completate nei giorni successivi.
+4. Controllare il riepilogo e `uv run python -m scraper status --storage r2`.
+5. Da qui in poi il cron gira da solo ogni notte. Annotare in `docs/fonti/trovacasa.md` durata, errori e minuti consumati dei primi run.
+
 ## Eseguire la raccolta
 
 ```bash

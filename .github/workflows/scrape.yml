@@ -1,0 +1,63 @@
+# Raccolta giornaliera degli annunci. Guida: docs/runbook.md
+# Il repository è pubblico: i log sono pubblici. Lo scraper scrive nei log e nel
+# riepilogo SOLO conteggi aggregati; i dati vanno su Cloudflare R2.
+name: Raccolta giornaliera
+
+on:
+  schedule:
+    - cron: "17 2 * * *"  # 02:17 UTC = notte italiana; minuto non tondo per evitare i picchi di GitHub
+  workflow_dispatch:
+    inputs:
+      cities:
+        description: "Comuni (slug separati da virgola, vuoto = tutti)"
+        type: string
+        default: ""
+      full_details:
+        description: "Scarica il dettaglio di tutti gli annunci"
+        type: boolean
+        default: false
+      max_pages:
+        description: "Pagine massime per segmento (0 = tutte; >0 solo per prove, blocca le scomparse)"
+        type: number
+        default: 0
+      max_runtime_minutes:
+        description: "Durata massima del run in minuti (340 per il primo avvio)"
+        type: number
+        default: 100
+      dry_run:
+        description: "Esegui senza scrivere nulla"
+        type: boolean
+        default: false
+
+concurrency:
+  group: scrape
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350  # rete di sicurezza: la scadenza vera è gestita dallo scraper
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+      - name: Installa le dipendenze
+        run: uv sync --package scraper --no-dev
+      - name: Raccolta
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          IN_CITIES: ${{ inputs.cities }}
+          IN_FULL: ${{ inputs.full_details }}
+          IN_MAX_PAGES: ${{ inputs.max_pages }}
+          IN_RUNTIME: ${{ inputs.max_runtime_minutes }}
+          IN_DRY: ${{ inputs.dry_run }}
+        run: |
+          args=(run --storage r2)
+          [ -n "$IN_CITIES" ] && args+=(--cities "$IN_CITIES")
+          [ "$IN_FULL" = "true" ] && args+=(--full-details)
+          [ -n "$IN_MAX_PAGES" ] && [ "$IN_MAX_PAGES" != "0" ] && args+=(--max-pages "$IN_MAX_PAGES")
+          [ -n "$IN_RUNTIME" ] && args+=(--max-runtime-minutes "$IN_RUNTIME")
+          [ "$IN_DRY" = "true" ] && args+=(--dry-run)
+          uv run --no-dev python -m scraper "${args[@]}"

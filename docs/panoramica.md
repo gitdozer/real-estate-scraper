@@ -23,7 +23,7 @@ Progetto personale, nel tempo libero, solo strumenti gratuiti.
 
 | Fase | Contenuto | Stato |
 |---|---|---|
-| 1 | Raccolta giornaliera automatica (GitHub Actions → Cloudflare R2), storico per annuncio, segnali per riconoscere ripubblicazioni (riferimento agenzia, coordinate, impronte foto, descrizione) | in sviluppo |
+| 1 | Raccolta giornaliera automatica (GitHub Actions → Cloudflare R2), storico per annuncio, segnali per riconoscere ripubblicazioni (riferimento agenzia, coordinate, impronte foto, descrizione) | codice pronto (0.1.0), in attesa di messa in produzione |
 | 2 | Riconoscimento di ripubblicazioni e duplicati: entità "immobile" che raggruppa più annunci | da fare |
 | 3 | Dashboard locale (Streamlit + DuckDB) | da fare |
 | 4 | Altre fonti (siti di reti di agenzie senza protezioni anti-bot) | da fare |

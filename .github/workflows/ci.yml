@@ -1,0 +1,18 @@
+# Test automatici a ogni push e pull request.
+name: Test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+      - name: Installa le dipendenze
+        run: uv sync --package scraper
+      - name: Esegui i test
+        run: uv run pytest -q
