@@ -1,0 +1,20 @@
+# Dati e file locali: mai nel repository
+*.csv
+*.docx
+data/
+.env
+.env.*
+
+# Python / uv
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# Strumenti
+.superpowers/
+.vscode/
+.idea/
