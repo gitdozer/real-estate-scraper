@@ -1,0 +1,6 @@
+_id;url;prezzo;titolo;indirizzo;superficie_m2;num_locali;num_bagni;classe_ener;tags;attivo;data_comparsa;data_aggiornamento;data_scomparsa
+TC1;https://www.trovacasa.it/annunci/mi-tc-900-1;219.000 €;Appartamento in vendita a Milano via Uno, 1;Milano, Via Uno, 1;40;2.0;1.0;E;['Arredato', 'Ascensore'];True;2026-10-17;;
+TC2;https://www.trovacasa.it/annunci/mi-tc-900-2;Prezzo su richiesta;Villa a Schiera in vendita a Milano via Due;Milano, Via Due;1200;6.0;3.0;D  69,98 kWh/m3 anno;[];True;2026-10-17;;
+TC3;https://www.trovacasa.it/annunci/mi-tc-900-3;150.000 €;Appartamento all'asta a Milano via Tre, 3;Milano, Via Tre, 3;55;;;non disponibile;['All\'asta/Asta Giudiziaria'];True;2026-10-17;;
+TC4;https://www.trovacasa.it/annunci/mi-tc-901-4;1.450.000 €;Attico in in vendita da privato a Milano via Quattro;Milano, Via Quattro;180;5.0;2.0;A4;['Terrazzo'];True;2026-10-17;;
+TC5;https://www.trovacasa.it/annunci/mi-tc-902-5;320.000 €;Appartamento in vendita a Milano via Cinque;Milano, Via Cinque;85;3.0;1.0;G;['Cantina'];True;2026-10-17;;

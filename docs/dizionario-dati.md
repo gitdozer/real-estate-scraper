@@ -187,6 +187,22 @@ Percorso: `raw/dt=YYYY-MM-DD/raw.parquet`. Serve a ri-analizzare le pagine se il
 | `html` | str | pagina completa (compressa dal Parquet) |
 | `run_date` | date | giorno |
 
+## legacy — storico importato (una tantum)
+
+Percorso: `legacy/trovacasa_milano_2026-10-17.parquet` (+ il CSV originale nella stessa cartella). Annunci di **Milano in vendita** visti il **2026-10-17** dal vecchio scraper: 17.304 righe. Gli stessi annunci sono anche in `observations/dt=2026-10-17/` con `source_run = legacy` (senza foto, pagina e impronta) e hanno inizializzato lo stato con `first_seen = spell_start = list_last_seen = 2026-10-17` e `first_seen_censored = true`.
+
+| Colonna | Tipo | Significato |
+|---|---|---|
+| `listing_id`, `url`, `title`, `address` | str | dal CSV (`_id` senza il prefisso `TC`) |
+| `property_type`, `is_private`, `is_auction` | | ricavati dal titolo ("Appartamento in vendita a …", "… da privato …", "… all'asta …") |
+| `price_eur`, `price_on_request` | int?, bool | prezzo; nullo se "Prezzo su richiesta" |
+| `surface_m2`, `rooms`, `bathrooms` | float?, int?, int? | come nel CSV |
+| `energy_class`, `energy_kwh_m2_year` | str?, float? | classe e, quando presente, consumo |
+| `tags` | list[str] | caratteristiche |
+| `advertiser_id` | str? | dall'URL |
+| `in_scope`, `exclusion_reason` | | perimetro (564 aste, 295 interi stabili/palazzi esclusi) |
+| `seen_date` | date | 2026-10-17 |
+
 ## Storia dello schema
 
 | Versione | Data | Modifica |

@@ -27,6 +27,14 @@ Prova veloce in locale (2 comuni piccoli, ~20 secondi):
 uv run python -m scraper run --cities gorla-minore,marnate --storage local --local-root data
 ```
 
+## Importare lo storico (una volta sola, prima del primo run)
+
+```bash
+uv run python -m scraper import-legacy docs/scraping-data_2026_10_trovacasa_milano_20261017_234300_17304_annunci_completi.csv --storage r2
+```
+
+Rifiuta di partire se lo stato esiste già (`--force` per forzare: sovrascrive lo stato, da usare solo su un bucket vuoto). Il CSV non è nel repository: si trova nella cartella `docs/` locale ed è copiato su R2 in `legacy/`.
+
 ## Controllare che la raccolta sia aggiornata
 
 ```bash
