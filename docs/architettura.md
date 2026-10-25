@@ -31,6 +31,9 @@ Il codice non dipende da GitHub Actions: lo stesso comando gira su qualsiasi mac
 | `scope.py` | perimetro: cosa è residenziale "vero" |
 | `fingerprint.py` | impronte per capire se una scheda o un dettaglio sono cambiati |
 | `http.py` | client HTTP con tentativi e freno adattivo |
+| `state.py` | riconciliazione dello stato ed eventi (vedi `logica-scomparse.md`) |
+| `planner.py` | quali dettagli e quali foto scaricare oggi |
+| `quality.py` | completezza dei segmenti e allarme calo |
 
 ## Rete
 
@@ -52,3 +55,29 @@ Client: `http.Fetcher` (httpx asincrono), header da browser reale, compressione 
 **Freno adattivo:** quando la finestra delle ultime `error_window` richieste è piena e i fallimenti definitivi (dopo tutti i tentativi) superano `error_threshold`, la concorrenza si dimezza (6 → 3 → 1). Se succede di nuovo con concorrenza 1, il client solleva `CircuitOpen`: il run si ferma in modo pulito, scrive quanto raccolto e **non registra scomparse**.
 
 **Scadenza:** `get_many(..., deadline=…)` non avvia nuove richieste dopo la scadenza; quelle non eseguite restano in coda per il giorno dopo.
+
+## Quali dettagli si scaricano ogni giorno
+
+Codice: `planner.py`. Un solo dettaglio per annuncio, con il motivo di priorità più alta. Se il run deve fermarsi per tempo si perdono per primi quelli in fondo, che passano al giorno dopo.
+
+| Priorità | Motivo | Quando |
+|---|---|---|
+| 1 | `absence_check` | annuncio attivo assente dagli elenchi di oggi (serve a decidere se è scomparso) |
+| 2 | `new` | annuncio mai visto, o ricomparso |
+| 3 | `changed` | l'impronta della scheda è cambiata (prezzo, superficie, foto, …) |
+| 4 | `never_detailed` | dettaglio mai scaricato (es. run precedente interrotto) |
+| 5 | `delisted_recheck` | annuncio `delisted`, ricontrollato ogni 7 giorni finché non dà 404 |
+| 6 | `rotation` | aggiornamento periodico: ogni annuncio ha un suo **giorno fisso** nel ciclo di 7 giorni (ID modulo 7), oppure il dettaglio ha più di 14 giorni |
+| 7 | `full` | solo con `full_details: true` (tutti, ogni giorno) |
+
+Gli annunci fuori perimetro (aste ecc.) non ricevono il dettaglio, salvo il controllo di assenza.
+
+**Perché il giorno fisso:** al bootstrap tutti i dettagli vengono scaricati lo stesso giorno; con la regola "più vecchio di 7 giorni" scadrebbero tutti insieme l'ottavo giorno. Con il giorno fisso ogni giorno se ne aggiorna circa un settimo.
+
+## Quali foto si scaricano
+
+Delle foto si calcola solo l'impronta percettiva; le immagini non si salvano. Ordine, entro il tetto `max_photos_per_run` (si aggiungono solo annunci interi):
+
+1. annunci **nuovi** (non censurati): prime `photos_new` = 6 foto;
+2. annunci con **elenco foto cambiato**: prime 6 foto;
+3. **arretrato** (annunci attivi senza impronte, es. quelli già online al bootstrap): prime `photos_backlog` = 3 foto, dal più vecchio.

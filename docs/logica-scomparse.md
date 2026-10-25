@@ -52,7 +52,15 @@ Il flag `data-eliminato` delle schede viene solo salvato: il suo significato va 
 
 ## Segmento completo (blocco di sicurezza)
 
-Un segmento è "completo" se nessuna pagina elenco è fallita dopo i tentativi e se gli annunci raccolti sono almeno il 97% del totale dichiarato dal sito (per i segmenti sotto 50 annunci: al massimo 2 mancanti). *(Regole dettagliate con i controlli di qualità.)*
+Codice: `quality.py`. Un segmento (fonte, comune, contratto) è **completo** solo se:
+
+1. la pagina 1 riporta il totale dichiarato dal sito (altrimenti motivo `no_declared_total`);
+2. nessuna pagina elenco è fallita dopo tutti i tentativi (`failed_pages`);
+3. gli annunci unici raccolti sono almeno il **97%** del totale dichiarato; per i segmenti con meno di **50** annunci dichiarati si ammettono al massimo **2** mancanti (`incomplete`).
+
+Un segmento incompleto **non genera scomparse** quel giorno e fa terminare il run con errore (email di GitHub). Anche `--max-pages` (raccolta limitata per test) rende i segmenti incompleti, quindi un run di prova non può mai registrare scomparse.
+
+**Allarme calo:** se gli annunci attivi sono calati più del **5%** rispetto al run precedente, il run termina con errore anche se i segmenti risultano completi (segnale di un cambiamento del sito).
 
 ## Da verificare nei primi giorni
 
