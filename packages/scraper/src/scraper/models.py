@@ -1,5 +1,8 @@
 """Record dei dati raccolti. Le colonne sono documentate in docs/dizionario-dati.md."""
 
+from datetime import date
+from typing import Literal
+
 from pydantic import BaseModel
 
 # Incrementare a ogni modifica dello schema dei file Parquet e annotarla nel dizionario dati.
@@ -70,6 +73,59 @@ class Detail(BaseModel):
     agency_address: str | None
     latitude: float | None
     longitude: float | None
+
+
+Status = Literal["active", "delisted", "removed"]
+EventType = Literal["new", "price_change", "delisted", "removed", "detail_gone", "reappeared", "detail_changed"]
+CheckOutcome = Literal["alive", "gone", "error"]
+
+
+class ListingState(BaseModel):
+    """Stato corrente di un annuncio (una riga di state/listings.parquet).
+
+    Le tre date della scomparsa sono spiegate in docs/logica-scomparse.md.
+    """
+
+    source: str
+    listing_id: str
+    city: str
+    contract: str
+    url: str
+    status: Status
+    in_scope: bool
+    exclusion_reason: str | None
+    flags: list[str]
+    first_seen: date
+    first_seen_censored: bool
+    list_last_seen: date
+    absent_since: date | None
+    missing_streak: int
+    delisted_date: date | None
+    detail_gone_date: date | None
+    last_check_date: date | None
+    last_fingerprint: str | None
+    last_price: int | None
+    last_detail_date: date | None
+    last_detail_hash: str | None
+    photo_ids_hash: str | None
+    photos_done: int
+
+    @property
+    def key(self) -> ListingKey:
+        return (self.source, self.listing_id)
+
+    @property
+    def segment(self) -> SegmentKey:
+        return (self.source, self.city, self.contract)
+
+
+class Event(BaseModel):
+    source: str
+    listing_id: str
+    run_date: date
+    type: EventType
+    old_value: str | None = None
+    new_value: str | None = None
 
 
 class ListPage(BaseModel):

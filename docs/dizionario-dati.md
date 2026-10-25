@@ -101,6 +101,44 @@ Percorso: `details/dt=YYYY-MM-DD/part-0.parquet`. Una riga per ogni dettaglio sc
 | `detail_hash` | str | impronta di tutti i campi sopra: cambia se cambia qualcosa nel dettaglio |
 | `run_date` | date | giorno della raccolta |
 
+## state — stato corrente, una riga per annuncio
+
+Percorso: `state/listings.parquet` (sovrascritto a fine run). Spiegazione degli stati e delle date: [logica-scomparse.md](logica-scomparse.md).
+
+| Colonna | Tipo | Significato |
+|---|---|---|
+| `source`, `listing_id` | str | chiave dell'annuncio |
+| `city`, `contract` | str | segmento dell'ultima volta in cui è stato visto |
+| `url` | str | URL della pagina di dettaglio |
+| `status` | str | `active`, `delisted` (sparito dagli elenchi, pagina ancora online), `removed` (pagina 404) |
+| `in_scope`, `exclusion_reason`, `flags` | | perimetro, come in `observations` |
+| `first_seen` | date | primo giorno in cui è stato visto |
+| `first_seen_censored` | bool | già online al primo giorno di raccolta del segmento (o nello storico importato): l'inizio reale è precedente |
+| `list_last_seen` | date | ultimo giorno visto negli elenchi — **data di fine per il tempo di vendita** |
+| `absent_since` | date? | primo giorno dell'assenza in corso (nullo se presente) |
+| `missing_streak` | int | run completi consecutivi in cui è risultato assente con pagina ancora online |
+| `delisted_date` | date? | primo giorno dell'assenza confermata |
+| `detail_gone_date` | date? | primo giorno in cui il dettaglio ha risposto 404 |
+| `last_check_date` | date? | ultimo controllo del dettaglio durante un'assenza |
+| `last_fingerprint` | str? | impronta dell'ultima scheda vista |
+| `last_price` | int? | ultimo prezzo visto negli elenchi |
+| `last_detail_date` | date? | ultimo giorno in cui è stato scaricato il dettaglio |
+| `last_detail_hash` | str? | impronta dell'ultimo dettaglio |
+| `photo_ids_hash` | str? | impronta dell'elenco foto per cui sono state calcolate le impronte |
+| `photos_done` | int | numero di foto con impronta calcolata |
+
+## events — cosa è successo, un evento per riga
+
+Percorso: `events/dt=YYYY-MM-DD/part-0.parquet`.
+
+| Colonna | Tipo | Significato |
+|---|---|---|
+| `source`, `listing_id` | str | chiave dell'annuncio |
+| `run_date` | date | giorno del run |
+| `type` | str | `new`, `price_change`, `delisted`, `removed`, `detail_gone`, `reappeared`, `detail_changed` |
+| `old_value` | str? | `price_change`: prezzo precedente; `reappeared`: stato precedente |
+| `new_value` | str? | `new`/`price_change`: prezzo nuovo; `reappeared`: `active` |
+
 ## Storia dello schema
 
 | Versione | Data | Modifica |
