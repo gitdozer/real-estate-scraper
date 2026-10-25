@@ -34,6 +34,7 @@ Il codice non dipende da GitHub Actions: lo stesso comando gira su qualsiasi mac
 | `state.py` | riconciliazione dello stato ed eventi (vedi `logica-scomparse.md`) |
 | `planner.py` | quali dettagli e quali foto scaricare oggi |
 | `quality.py` | completezza dei segmenti e allarme calo |
+| `photos.py` | impronte percettive delle foto |
 
 ## Rete
 

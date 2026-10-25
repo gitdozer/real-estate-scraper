@@ -101,6 +101,21 @@ Percorso: `details/dt=YYYY-MM-DD/part-0.parquet`. Una riga per ogni dettaglio sc
 | `detail_hash` | str | impronta di tutti i campi sopra: cambia se cambia qualcosa nel dettaglio |
 | `run_date` | date | giorno della raccolta |
 
+## photos — impronte percettive delle foto
+
+Percorso: `photos/dt=YYYY-MM-DD/part-0.parquet`. Le immagini **non** vengono salvate: solo le impronte. Servono in fase 2 a riconoscere lo stesso immobile ripubblicato con un nuovo ID (le agenzie ricaricano le stesse foto).
+
+| Colonna | Tipo | Significato |
+|---|---|---|
+| `source`, `listing_id` | str | chiave dell'annuncio |
+| `photo_index` | int | posizione della foto nell'annuncio (0 = prima) |
+| `photo_id` | str | ID della foto sulla fonte |
+| `phash` | str | impronta percettiva pHash a 64 bit (16 caratteri esadecimali) |
+| `dhash` | str | impronta dHash a 64 bit, complementare |
+| `run_date` | date | giorno del calcolo |
+
+**Come confrontare due foto:** distanza di Hamming tra le impronte (`scraper.photos.hamming`, oppure in SQL `bit_count(xor(...))` sugli interi). Indicativamente ≤ 6 su 64 bit = stessa foto (anche ridimensionata o ricompressa); > 10 = foto diverse. Le soglie definitive si tareranno in fase 2 su dati reali.
+
 ## state — stato corrente, una riga per annuncio
 
 Percorso: `state/listings.parquet` (sovrascritto a fine run). Spiegazione degli stati e delle date: [logica-scomparse.md](logica-scomparse.md).
