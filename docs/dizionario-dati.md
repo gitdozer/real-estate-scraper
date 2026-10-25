@@ -12,6 +12,30 @@ Tutti i dati vivono su Cloudflare R2 in file Parquet (compressione zstd), partiz
   - `schema_version` — versione dello schema (intero). Ogni modifica di colonne la incrementa ed è descritta in fondo, in "Storia dello schema".
   - `scraper_version` — versione del codice che ha prodotto il dato, es. `0.1.0+abc1234` (versione + commit) o `0.1.0+local`.
 
+## Layout dei file (bucket R2, o cartella locale in sviluppo)
+
+| Percorso | Contenuto | Quando si scrive |
+|---|---|---|
+| `observations/dt=YYYY-MM-DD/part-0.parquet` | ogni scheda vista negli elenchi quel giorno | ogni run (~38k righe) |
+| `details/dt=YYYY-MM-DD/part-0.parquet` | dettagli scaricati quel giorno | ogni run |
+| `photos/dt=YYYY-MM-DD/part-0.parquet` | impronte delle foto calcolate quel giorno | ogni run |
+| `events/dt=YYYY-MM-DD/part-0.parquet` | eventi del giorno (nuovo, prezzo, scomparso, …) | ogni run |
+| `raw/dt=YYYY-MM-DD/raw.parquet` | HTML compresso dei dettagli nuovi/cambiati e dei primi controlli di scomparsa, per poter ri-analizzare le pagine | ogni run; conservato **90 giorni** |
+| `state/listings.parquet` | stato corrente: una riga per annuncio | sovrascritto a fine run |
+| `state/history/listings-YYYY-MM-DD.parquet` | copia dello stato **prima** del run di quel giorno, per ripristino | ogni run; conservata **30 giorni** |
+| `runs/dt=YYYY-MM-DD/report.json` | report del run: richieste, errori, completezza, eventi, esito | ogni run |
+| `legacy/` | storico importato una tantum (CSV originale + Parquet) | una volta |
+
+Ordine di scrittura di un run: partizioni del giorno → copia dello stato precedente → nuovo stato → report. Rieseguire lo stesso giorno sovrascrive le partizioni di quel giorno.
+
+Lettura con DuckDB (esempio):
+
+```sql
+INSTALL httpfs; LOAD httpfs;
+CREATE SECRET r2 (TYPE r2, KEY_ID '…', SECRET '…', ACCOUNT_ID '…');
+SELECT * FROM read_parquet('r2://<bucket>/observations/*/*.parquet', hive_partitioning = true);
+```
+
 ## observations — una riga per ogni scheda vista negli elenchi
 
 Percorso: `observations/dt=YYYY-MM-DD/part-0.parquet`. Contiene **tutte** le schede viste quel giorno, anche quelle fuori perimetro (aste ecc.), marcate.
