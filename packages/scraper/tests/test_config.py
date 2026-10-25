@@ -39,3 +39,8 @@ def test_settings_file_matches_defaults():
 def test_settings_ignores_none_overrides():
     s = load_settings(REPO / "config/settings.yaml", {"max_pages": None})
     assert s.max_pages == 0
+
+
+def test_settings_rejects_zero_rotation():
+    with pytest.raises(ValidationError):
+        load_settings(REPO / "config/settings.yaml", {"rotation_days": 0})

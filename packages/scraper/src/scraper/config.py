@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 Contract = Literal["vendita", "affitto"]
 
@@ -21,13 +21,13 @@ class City(BaseModel):
 class Settings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    site_concurrency: int = 6
-    image_concurrency: int = 8
-    max_retries: int = 4
+    site_concurrency: int = Field(6, gt=0)
+    image_concurrency: int = Field(8, gt=0)
+    max_retries: int = Field(4, gt=0)
     timeout_s: float = 30.0
-    error_window: int = 200
+    error_window: int = Field(200, gt=0)
     error_threshold: float = 0.2
-    rotation_days: int = 7
+    rotation_days: int = Field(7, gt=0)
     photos_new: int = 6
     photos_backlog: int = 3
     max_photos_per_run: int = 30000
@@ -35,10 +35,10 @@ class Settings(BaseModel):
     small_segment_threshold: int = 50
     small_segment_max_missing: int = 2
     active_drop_alert: float = 0.05
-    delisted_recheck_days: int = 7
+    delisted_recheck_days: int = Field(7, gt=0)
     raw_retention_days: int = 90
     state_history_days: int = 30
-    max_runtime_minutes: int = 100
+    max_runtime_minutes: int = Field(100, gt=0)
     full_details: bool = False
     max_pages: int = 0
 

@@ -43,11 +43,18 @@ def test_never_detailed():
     assert reasons(plan([fresh("1", last_detail_date=None)], [card("1")])) == {"1": "never_detailed"}
 
 
+def _id_not_due(day):
+    return next(str(i) for i in range(1, 100) if i % S.rotation_days != day.toordinal() % S.rotation_days)
+
+
 def test_unchanged_recent_listing_is_skipped():
-    # Invariato e dettagliato ieri: nessun dettaglio, salvo che oggi sia il suo giorno di rotazione.
-    tasks = plan([fresh("7")], [card("7")])
-    due_today = 7 % S.rotation_days == DAY.toordinal() % S.rotation_days
-    assert reasons(tasks) == ({"7": "rotation"} if due_today else {})
+    lid = _id_not_due(DAY)
+    assert plan([fresh(lid)], [card(lid)]) == []
+
+
+def test_no_rotation_when_detailed_today():
+    states = [fresh(str(i), last_detail_date=DAY) for i in range(1, 15)]
+    assert plan(states, [card(str(i)) for i in range(1, 15)]) == []
 
 
 def test_rotation_when_too_old():
@@ -132,8 +139,8 @@ def test_plan_photos_censored_new_goes_to_backlog_k3():
 
 def test_plan_photos_backlog_oldest_first_and_cap():
     st = by_key(
-        state("1", first_seen=date(2026, 10, 20)),
-        state("2", first_seen=date(2026, 10, 10)),
+        state("1", first_seen=date(2026, 10, 20), first_seen_censored=True),
+        state("2", first_seen=date(2026, 10, 10), first_seen_censored=True),
         state("3", first_seen=date(2026, 10, 15), photos_done=3, photo_ids_hash=photo_ids_hash(photos("3", 5))),
     )
     cards = by_key(*(card(i, photo_ids=photos(i, 5)) for i in ("1", "2", "3")))
@@ -151,3 +158,45 @@ def test_plan_photos_skips_out_of_scope_and_no_photos():
     st = by_key(state("1", in_scope=False), state("2"))
     cards = by_key(card("1", photo_ids=photos("1", 5)), card("2", photo_ids=[]))
     assert plan_photos(st, cards, set(), PH) == []
+
+
+def test_delisted_recheck_when_never_checked():
+    assert reasons(plan([fresh("1", status="delisted", last_check_date=None)], [])) == {"1": "delisted_recheck"}
+
+
+def test_rotation_oldest_first_within_reason():
+    lid_a, lid_b = "1", "2"
+    a = fresh(lid_a, last_detail_date=DAY - timedelta(days=15))
+    b = fresh(lid_b, last_detail_date=DAY - timedelta(days=30))
+    assert [t.key[1] for t in plan([a, b], [card(lid_a), card(lid_b)])] == ["2", "1"]
+
+
+def test_plan_photos_uncensored_backlog_gets_full_k():
+    st = by_key(state("1", first_seen=DAY - timedelta(days=3), first_seen_censored=False))
+    assert len(plan_photos(st, by_key(card("1", photo_ids=photos("1", 10))), set(), PH)) == 6
+
+
+def test_plan_photos_partial_listing_is_redone():
+    st = by_key(state("1", first_seen_censored=False, photos_done=2, photo_ids_hash=photo_ids_hash(photos("1", 10))))
+    assert len(plan_photos(st, by_key(card("1", photo_ids=photos("1", 10))), set(), PH)) == 6
+
+
+def test_plan_photos_listing_with_few_photos_is_complete():
+    st = by_key(state("1", first_seen_censored=False, photos_done=2, photo_ids_hash=photo_ids_hash(photos("1", 2))))
+    assert plan_photos(st, by_key(card("1", photo_ids=photos("1", 2))), set(), PH) == []
+
+
+def test_plan_photos_priority_new_then_changed_then_backlog_under_cap():
+    st = by_key(
+        state("1", first_seen=DAY),
+        state("2", photos_done=6, photo_ids_hash=photo_ids_hash(["vecchia"])),
+        state("3", first_seen=date(2026, 1, 1), first_seen_censored=True),
+    )
+    cards = by_key(*(card(i, photo_ids=photos(i, 6)) for i in ("1", "2", "3")))
+    tasks = plan_photos(st, cards, {("trovacasa", "1")}, Settings(photos_new=6, photos_backlog=3, max_photos_per_run=12))
+    assert [t.key[1] for t in tasks] == ["1"] * 6 + ["2"] * 6
+
+
+def test_bucket_with_unicode_digits_does_not_crash():
+    tasks = plan([fresh("²", last_detail_date=DAY - timedelta(days=1))], [card("²")])
+    assert set(reasons(tasks).values()) <= {"rotation"}

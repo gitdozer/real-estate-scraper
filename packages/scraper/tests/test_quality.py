@@ -37,3 +37,22 @@ def test_active_drop_alert():
     assert active_drop_alert(1000, 940, S) is True
     assert active_drop_alert(1000, 960, S) is False
     assert active_drop_alert(0, 10, S) is False
+
+
+def test_boundaries():
+    assert segment_ok(49, 47, 0, S) == (True, None)
+    assert segment_ok(50, 48, 0, S) == (False, "incomplete")
+    assert segment_ok(100, 97, 0, S) == (True, None)
+    assert active_drop_alert(1000, 950, S) is False
+
+
+def test_suspicious_drop_vs_previous_active():
+    # Il sito dichiara "0 case" (o un totale sballato) ma ieri c'erano 17.000 annunci attivi.
+    assert segment_ok(0, 0, 0, S, prev_active=17000) == (False, "suspicious_drop")
+    assert segment_ok(9000, 9000, 0, S, prev_active=17000) == (False, "suspicious_drop")
+
+
+def test_normal_churn_is_not_suspicious():
+    assert segment_ok(16900, 16800, 0, S, prev_active=17000) == (True, None)
+    assert segment_ok(3, 3, 0, S, prev_active=4) == (True, None)
+    assert segment_ok(0, 0, 0, S, prev_active=2) == (True, None)

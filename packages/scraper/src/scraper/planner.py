@@ -30,7 +30,7 @@ class PhotoTask:
 
 
 def _bucket(listing_id: str, days: int) -> int:
-    n = int(listing_id) if listing_id.isdigit() else zlib.crc32(listing_id.encode("utf-8"))
+    n = int(listing_id) if listing_id.isascii() and listing_id.isdecimal() else zlib.crc32(listing_id.encode("utf-8"))
     return n % days
 
 
@@ -62,10 +62,12 @@ def _card_reason(prev: ListingState | None, card: Card, settings: Settings, run_
 def plan_details(
     prev: dict[ListingKey, ListingState],
     cards: dict[ListingKey, Card],
-    scraped_segments: set[SegmentKey],
+    check_segments: set[SegmentKey],
     settings: Settings,
     run_date: date,
 ) -> list[DetailTask]:
+    """`check_segments`: segmenti raccolti E completi oggi. Solo lì i controlli di assenza
+    servono: negli altri `reconcile` ne scarterebbe comunque l'esito."""
     tasks: list[DetailTask] = []
 
     for key, card in cards.items():
@@ -77,14 +79,17 @@ def plan_details(
 
     recheck = timedelta(days=settings.delisted_recheck_days)
     for key, st in prev.items():
-        if key in cards or st.segment not in scraped_segments:
+        if key in cards or st.segment not in check_segments:
             continue
         if st.status == "active":
             tasks.append(DetailTask(key, st.url, "absence_check"))
         elif st.status == "delisted" and (st.last_check_date is None or run_date - st.last_check_date >= recheck):
             tasks.append(DetailTask(key, st.url, "delisted_recheck"))
 
-    return sorted(tasks, key=lambda t: _PRIORITY.index(t.reason))
+    # A parità di motivo, prima i dettagli più vecchi: se la scadenza taglia la coda,
+    # non sono sempre gli stessi annunci a restare indietro.
+    last = {k: (s.last_detail_date or date.min) for k, s in prev.items()}
+    return sorted(tasks, key=lambda t: (_PRIORITY.index(t.reason), last.get(t.key, date.min)))
 
 
 def plan_photos(
@@ -107,6 +112,10 @@ def plan_photos(
         st, card = state.get(key), cards.get(key)
         return st is not None and card is not None and st.status == "active" and st.in_scope and bool(card.photo_ids)
 
+    def target(key: ListingKey) -> int:
+        # K ridotto solo per gli annunci già online all'avvio (censurati); gli altri hanno K pieno.
+        return settings.photos_backlog if state[key].first_seen_censored else settings.photos_new
+
     for key in sorted(new_keys):
         if eligible(key) and not state[key].first_seen_censored:
             add(key, settings.photos_new)
@@ -116,9 +125,10 @@ def plan_photos(
         if eligible(key) and st.photos_done > 0 and st.photo_ids_hash != photo_ids_hash(cards[key].photo_ids):
             add(key, settings.photos_new)
 
-    backlog = [k for k in cards if eligible(k) and state[k].photos_done == 0]
+    # Arretrato: annunci con meno impronte del dovuto (mai fatte, o interrotte a metà).
+    backlog = [k for k in cards if eligible(k) and state[k].photos_done < min(target(k), len(cards[k].photo_ids))]
     for key in sorted(backlog, key=lambda k: (state[k].first_seen, k[1])):
-        add(key, settings.photos_backlog)
+        add(key, target(key))
 
     tasks: list[PhotoTask] = []
     for key, k in plans:

@@ -63,15 +63,15 @@ Codice: `planner.py`. Un solo dettaglio per annuncio, con il motivo di priorità
 
 | Priorità | Motivo | Quando |
 |---|---|---|
-| 1 | `absence_check` | annuncio attivo assente dagli elenchi di oggi (serve a decidere se è scomparso) |
+| 1 | `absence_check` | annuncio attivo assente dagli elenchi di oggi, **solo nei segmenti raccolti e completi** (negli altri l'esito sarebbe scartato) |
 | 2 | `new` | annuncio mai visto, o ricomparso |
 | 3 | `changed` | l'impronta della scheda è cambiata (prezzo, superficie, foto, …) |
 | 4 | `never_detailed` | dettaglio mai scaricato (es. run precedente interrotto) |
 | 5 | `delisted_recheck` | annuncio `delisted`, ricontrollato ogni 7 giorni finché non dà 404 |
-| 6 | `rotation` | aggiornamento periodico: ogni annuncio ha un suo **giorno fisso** nel ciclo di 7 giorni (ID modulo 7), oppure il dettaglio ha più di 14 giorni |
+| 6 | `rotation` | aggiornamento periodico: ogni annuncio ha un suo **giorno fisso** nel ciclo di 7 giorni (ID modulo 7), oppure il dettaglio ha almeno 14 giorni |
 | 7 | `full` | solo con `full_details: true` (tutti, ogni giorno) |
 
-Gli annunci fuori perimetro (aste ecc.) non ricevono il dettaglio, salvo il controllo di assenza.
+Gli annunci fuori perimetro (aste ecc.) non ricevono il dettaglio, salvo il controllo di assenza. A parità di motivo si scaricano prima i dettagli più vecchi.
 
 **Perché il giorno fisso:** al bootstrap tutti i dettagli vengono scaricati lo stesso giorno; con la regola "più vecchio di 7 giorni" scadrebbero tutti insieme l'ottavo giorno. Con il giorno fisso ogni giorno se ne aggiorna circa un settimo.
 
@@ -81,4 +81,4 @@ Delle foto si calcola solo l'impronta percettiva; le immagini non si salvano. Or
 
 1. annunci **nuovi** (non censurati): prime `photos_new` = 6 foto;
 2. annunci con **elenco foto cambiato**: prime 6 foto;
-3. **arretrato** (annunci attivi senza impronte, es. quelli già online al bootstrap): prime `photos_backlog` = 3 foto, dal più vecchio.
+3. **arretrato** (annunci attivi con meno impronte del dovuto: mai calcolate, o interrotte a metà), dal più vecchio: prime `photos_backlog` = 3 foto per gli annunci censurati (già online all'avvio), prime 6 per gli altri.
