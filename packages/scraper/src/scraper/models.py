@@ -96,6 +96,7 @@ class ListingState(BaseModel):
     exclusion_reason: str | None
     flags: list[str]
     first_seen: date
+    spell_start: date
     first_seen_censored: bool
     list_last_seen: date
     absent_since: date | None
@@ -120,12 +121,23 @@ class ListingState(BaseModel):
 
 
 class Event(BaseModel):
+    """Un fatto accaduto a un annuncio in un run.
+
+    Gli eventi di scomparsa (`removed`, `delisted`) e `reappeared` riportano le date
+    del periodo online appena chiuso: spell_start → list_last_seen è un tempo di permanenza.
+    """
+
     source: str
     listing_id: str
+    city: str
+    contract: str
     run_date: date
     type: EventType
     old_value: str | None = None
     new_value: str | None = None
+    spell_start: date | None = None
+    list_last_seen: date | None = None
+    delisted_date: date | None = None
 
 
 class ListPage(BaseModel):

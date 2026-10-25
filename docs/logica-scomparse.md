@@ -7,10 +7,10 @@ Il rischio numero uno del progetto sono le **scomparse false**: un errore di ret
 ## Stati
 
 ```
-            (compare)                 assente + dettaglio 404
+            (compare)                 assente + dettaglio 404/410
    ┌──────► active ──────────────────────────────────────────► removed
    │          │                                                  ▲
-   │          │ assente + dettaglio 200 per 2 run completi       │ dettaglio 404
+   │          │ assente + dettaglio 200 per 2 controlli          │ dettaglio 404/410
    │          ▼                                                  │ (ricontrollo settimanale)
    │       delisted ─────────────────────────────────────────────┘
    │          │
@@ -18,34 +18,44 @@ Il rischio numero uno del progetto sono le **scomparse false**: un errore di ret
 ```
 
 - **active** — compare negli elenchi (o è assente da troppo poco per decidere).
-- **delisted** — non compare più negli elenchi da 2 run completi consecutivi, ma la pagina di dettaglio risponde ancora. **Conta come scomparso** per il tempo di vendita.
-- **removed** — la pagina di dettaglio risponde 404.
+- **delisted** — assente dagli elenchi (in raccolte complete) con la pagina di dettaglio che risponde ancora 200 in **2 controlli**, senza ricomparire nel frattempo. **Conta come scomparso** per il tempo di vendita.
+- **removed** — la pagina di dettaglio risponde 404 (o 410).
 
 ## Le tre date
 
 | Campo | Significato |
 |---|---|
 | `list_last_seen` | ultimo giorno in cui l'annuncio compariva negli elenchi. **È la data di fine per il tempo di vendita.** |
-| `delisted_date` | primo giorno di assenza (inizio dell'assenza poi confermata) |
-| `detail_gone_date` | primo giorno in cui la pagina di dettaglio ha risposto 404 |
+| `delisted_date` | primo giorno di assenza **con esito certo del controllo** (inizio dell'assenza poi confermata) |
+| `detail_gone_date` | primo giorno in cui la pagina di dettaglio ha risposto 404/410 |
 
-Tra `list_last_seen` e `delisted_date` può esserci più di un giorno se il run è saltato: la scomparsa è avvenuta in quell'intervallo.
+Tra `list_last_seen` e `delisted_date` può esserci più di un giorno (run saltato, segmento incompleto, controllo in errore): la scomparsa è avvenuta in quell'intervallo.
 
-**Tempo di vendita** = `list_last_seen − first_seen` per gli annunci `delisted`/`removed`. Gli annunci con `first_seen_censored = true` erano già online al primo giorno di raccolta del loro segmento: il loro inizio reale è precedente (dato censurato a sinistra). Quelli ancora `active` sono censurati a destra. Va usata l'analisi di sopravvivenza.
+## Periodi online (spell)
+
+Un annuncio può sparire e ricomparire con lo **stesso ID**. Ogni permanenza continuativa online è un *periodo* (spell) che inizia in `spell_start` e finisce in `list_last_seen`:
+
+- per un annuncio nuovo `spell_start = first_seen`;
+- quando ricompare, il periodo precedente si chiude (le sue date restano nell'evento `reappeared`: `spell_start`, `list_last_seen`, `delisted_date`) e se ne apre uno nuovo con `spell_start` = giorno della ricomparsa;
+- gli eventi `removed` e `delisted` riportano le date del periodo che si chiude.
+
+**La tabella `events` filtrata su `removed`/`delisted` è quindi direttamente l'elenco delle "vendite"**, ognuna con inizio e fine.
+
+**Tempo di vendita** = `list_last_seen − spell_start` del periodo chiuso. Gli annunci con `first_seen_censored = true` erano già online al primo giorno di raccolta del loro segmento: il loro inizio reale è precedente (dato censurato a sinistra). Quelli ancora `active` sono censurati a destra. Va usata l'analisi di sopravvivenza.
 
 ## Regole di un run
 
 Per ogni annuncio **presente** negli elenchi di oggi:
 - se è nuovo → `active`, `first_seen = oggi`, evento `new`;
-- se era `delisted` o `removed` → torna `active`, evento `reappeared` (le date di scomparsa precedenti restano negli eventi);
+- se era `delisted` o `removed` → torna `active`, evento `reappeared` con le date del periodo precedente, e inizia un nuovo periodo;
 - se il prezzo è diverso dall'ultimo → evento `price_change` (anche da/verso "nessun prezzo");
 - in ogni caso `list_last_seen = oggi`, l'assenza si azzera.
 
 Per ogni annuncio **assente**:
 1. Se il suo segmento (fonte, comune, contratto) **non è stato raccolto** oggi o è stato raccolto **in modo incompleto** → nessuna modifica.
 2. Altrimenti conta l'esito del controllo della pagina di dettaglio:
-   - **404** → `removed` (evento `removed`; da `delisted` → evento `detail_gone`);
-   - **200** → assenza +1; alla seconda assenza consecutiva → `delisted` (evento `delisted`);
+   - **404/410** → `removed` (evento `removed`; da `delisted` → evento `detail_gone`);
+   - **200** → assenza +1; al secondo controllo con esito 200 senza ricomparsa nel frattempo → `delisted` (evento `delisted`). I giorni con esito incerto in mezzo non azzerano il conteggio;
    - **errore, timeout o controllo non eseguito** → nessuna modifica.
 
 Il flag `data-eliminato` delle schede viene solo salvato: il suo significato va verificato confrontandolo con i 404 reali.
@@ -66,3 +76,4 @@ Un segmento incompleto **non genera scomparse** quel giorno e fa terminare il ru
 
 - Come il sito presenta un annuncio **realmente** rimosso (404? redirect? pagina con avviso?). Il 404 è stato verificato solo su ID inventati. Si salva l'HTML dei primi 50 controlli con esito 404 di ogni run (`raw/`).
 - Il significato di `data-eliminato`.
+- Annunci che cambiano segmento (es. stesso annuncio negli elenchi di due comuni vicini): lo stato ricorda l'ultimo segmento visto; se l'annuncio compare solo nell'altro segmento e quello non viene raccolto, potrebbe risultare `delisted`. Con la raccolta di tutti i comuni ogni giorno il caso non si presenta; da monitorare.

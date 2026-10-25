@@ -78,6 +78,7 @@ def state(listing_id: str, status: str = "active", city: str = "milano", contrac
         exclusion_reason=None,
         flags=[],
         first_seen=date(2026, 10, 1),
+        spell_start=date(2026, 10, 1),
         first_seen_censored=False,
         list_last_seen=date(2026, 10, 25),
         absent_since=None,

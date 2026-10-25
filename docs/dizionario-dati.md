@@ -125,15 +125,16 @@ Percorso: `state/listings.parquet` (sovrascritto a fine run). Spiegazione degli 
 | `source`, `listing_id` | str | chiave dell'annuncio |
 | `city`, `contract` | str | segmento dell'ultima volta in cui è stato visto |
 | `url` | str | URL della pagina di dettaglio |
-| `status` | str | `active`, `delisted` (sparito dagli elenchi, pagina ancora online), `removed` (pagina 404) |
+| `status` | str | `active`, `delisted` (sparito dagli elenchi, pagina ancora online), `removed` (pagina 404/410) |
 | `in_scope`, `exclusion_reason`, `flags` | | perimetro, come in `observations` |
 | `first_seen` | date | primo giorno in cui è stato visto |
+| `spell_start` | date | inizio del periodo online corrente (= `first_seen`, o giorno dell'ultima ricomparsa) |
 | `first_seen_censored` | bool | già online al primo giorno di raccolta del segmento (o nello storico importato): l'inizio reale è precedente |
 | `list_last_seen` | date | ultimo giorno visto negli elenchi — **data di fine per il tempo di vendita** |
 | `absent_since` | date? | primo giorno dell'assenza in corso (nullo se presente) |
-| `missing_streak` | int | run completi consecutivi in cui è risultato assente con pagina ancora online |
-| `delisted_date` | date? | primo giorno dell'assenza confermata |
-| `detail_gone_date` | date? | primo giorno in cui il dettaglio ha risposto 404 |
+| `missing_streak` | int | controlli con esito 200 durante l'assenza in corso |
+| `delisted_date` | date? | primo giorno dell'assenza confermata (con esito certo del controllo) |
+| `detail_gone_date` | date? | primo giorno in cui il dettaglio ha risposto 404/410 |
 | `last_check_date` | date? | ultimo controllo del dettaglio durante un'assenza |
 | `last_fingerprint` | str? | impronta dell'ultima scheda vista |
 | `last_price` | int? | ultimo prezzo visto negli elenchi |
@@ -149,10 +150,16 @@ Percorso: `events/dt=YYYY-MM-DD/part-0.parquet`.
 | Colonna | Tipo | Significato |
 |---|---|---|
 | `source`, `listing_id` | str | chiave dell'annuncio |
+| `city`, `contract` | str | segmento dell'annuncio |
 | `run_date` | date | giorno del run |
 | `type` | str | `new`, `price_change`, `delisted`, `removed`, `detail_gone`, `reappeared`, `detail_changed` |
 | `old_value` | str? | `price_change`: prezzo precedente; `reappeared`: stato precedente |
 | `new_value` | str? | `new`/`price_change`: prezzo nuovo; `reappeared`: `active` |
+| `spell_start` | date? | `removed`/`delisted`/`detail_gone`/`reappeared`: inizio del periodo online che si chiude |
+| `list_last_seen` | date? | idem: ultimo giorno visto negli elenchi (fine del periodo) |
+| `delisted_date` | date? | idem: primo giorno di assenza confermata |
+
+Filtrando `type in ('removed', 'delisted')` si ottiene l'elenco delle "vendite" con le loro date (vedi [logica-scomparse.md](logica-scomparse.md)).
 
 ## Storia dello schema
 

@@ -36,7 +36,7 @@ def _present(prev: ListingState | None, card: Card, bootstrap: bool, run_date: d
         last_fingerprint=card_fingerprint(card),
         last_price=card.price_eur,
     )
-    ev = dict(source=card.source, listing_id=card.listing_id, run_date=run_date)
+    ev = dict(source=card.source, listing_id=card.listing_id, city=card.city, contract=card.contract, run_date=run_date)
 
     if prev is None:
         events.append(Event(**ev, type="new", new_value=_str(card.price_eur)))
@@ -45,6 +45,7 @@ def _present(prev: ListingState | None, card: Card, bootstrap: bool, run_date: d
             listing_id=card.listing_id,
             status="active",
             first_seen=run_date,
+            spell_start=run_date,
             first_seen_censored=bootstrap,
             delisted_date=None,
             detail_gone_date=None,
@@ -56,33 +57,49 @@ def _present(prev: ListingState | None, card: Card, bootstrap: bool, run_date: d
             **common,
         )
 
+    spell_start = prev.spell_start
     if prev.status != "active":
-        events.append(Event(**ev, type="reappeared", old_value=prev.status, new_value="active"))
+        # Ricompare con lo stesso ID: si chiude il periodo precedente (date nell'evento) e se ne apre uno nuovo.
+        events.append(
+            Event(
+                **ev,
+                type="reappeared",
+                old_value=prev.status,
+                new_value="active",
+                spell_start=prev.spell_start,
+                list_last_seen=prev.list_last_seen,
+                delisted_date=prev.delisted_date,
+            )
+        )
+        spell_start = run_date
     if card.price_eur != prev.last_price:
         events.append(Event(**ev, type="price_change", old_value=_str(prev.last_price), new_value=_str(card.price_eur)))
-    return prev.model_copy(update=dict(status="active", delisted_date=None, detail_gone_date=None, **common))
+    return prev.model_copy(update=dict(status="active", spell_start=spell_start, delisted_date=None, detail_gone_date=None, **common))
 
 
 def _absent(prev: ListingState, check: CheckOutcome | None, run_date: date, events: list[Event]) -> ListingState:
     if check not in ("alive", "gone"):
         return prev  # nessun esito certo: non si decide nulla
-    ev = dict(source=prev.source, listing_id=prev.listing_id, run_date=run_date)
+    ev = dict(source=prev.source, listing_id=prev.listing_id, city=prev.city, contract=prev.contract, run_date=run_date)
 
     if prev.status == "active":
         absent_since = prev.absent_since or run_date
         base = dict(absent_since=absent_since, last_check_date=run_date)
+        spell = dict(spell_start=prev.spell_start, list_last_seen=prev.list_last_seen, delisted_date=absent_since)
         if check == "gone":
-            events.append(Event(**ev, type="removed"))
+            events.append(Event(**ev, type="removed", **spell))
             return prev.model_copy(update=dict(status="removed", delisted_date=absent_since, detail_gone_date=run_date, **base))
         streak = prev.missing_streak + 1
         if streak >= DELIST_AFTER_ABSENT_RUNS:
-            events.append(Event(**ev, type="delisted"))
+            events.append(Event(**ev, type="delisted", **spell))
             return prev.model_copy(update=dict(status="delisted", delisted_date=absent_since, missing_streak=streak, **base))
         return prev.model_copy(update=dict(missing_streak=streak, **base))
 
     if prev.status == "delisted":
         if check == "gone":
-            events.append(Event(**ev, type="detail_gone"))
+            events.append(
+                Event(**ev, type="detail_gone", spell_start=prev.spell_start, list_last_seen=prev.list_last_seen, delisted_date=prev.delisted_date)
+            )
             return prev.model_copy(update=dict(status="removed", detail_gone_date=run_date, last_check_date=run_date))
         return prev.model_copy(update=dict(last_check_date=run_date))
 
@@ -92,7 +109,9 @@ def _absent(prev: ListingState, check: CheckOutcome | None, run_date: date, even
 def _apply_detail(state: ListingState, detail: Detail, run_date: date, events: list[Event]) -> ListingState:
     h = detail_hash(detail)
     if state.last_detail_hash is not None and state.last_detail_hash != h:
-        events.append(Event(source=state.source, listing_id=state.listing_id, run_date=run_date, type="detail_changed"))
+        events.append(
+            Event(source=state.source, listing_id=state.listing_id, city=state.city, contract=state.contract, run_date=run_date, type="detail_changed")
+        )
     return state.model_copy(update=dict(last_detail_date=run_date, last_detail_hash=h))
 
 

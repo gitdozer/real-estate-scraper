@@ -167,3 +167,90 @@ def test_reconcile_keeps_listings_not_mentioned():
     a, b = state("1"), state("2", status="removed")
     new, _ = run([a, b], cards=[card("1")])
     assert set(new) == {K, ("trovacasa", "2")} and new[("trovacasa", "2")] == b
+
+
+# --- periodi online (spell) e date negli eventi: revisione Task 6 -------------
+
+def test_new_listing_starts_spell_and_event_has_segment():
+    new, events = run({}, cards=[card("1")])
+    assert new[K].spell_start == D1
+    assert (events[0].city, events[0].contract) == ("milano", "vendita")
+
+
+def test_removed_event_carries_spell_dates():
+    _, events = run([state("1", spell_start=date(2026, 10, 5))], checks={K: "gone"})
+    e = events[0]
+    assert e.type == "removed" and e.spell_start == date(2026, 10, 5)
+    assert e.list_last_seen == date(2026, 10, 25) and e.delisted_date == D1
+
+
+def test_delisted_event_carries_spell_dates():
+    day1, _ = run([state("1")], checks={K: "alive"}, day=D1)
+    _, events = run(day1, checks={K: "alive"}, day=D2)
+    e = events[0]
+    assert e.type == "delisted" and e.spell_start == date(2026, 10, 1)
+    assert e.list_last_seen == date(2026, 10, 25) and e.delisted_date == D1
+
+
+def test_reappeared_starts_new_spell_and_keeps_old_dates_in_event():
+    prev = state("1", status="removed", absent_since=D1, delisted_date=D1, detail_gone_date=D1)
+    new, events = run([prev], cards=[card("1")], day=date(2026, 12, 1))
+    e = next(e for e in events if e.type == "reappeared")
+    assert e.old_value == "removed" and e.list_last_seen == date(2026, 10, 25) and e.delisted_date == D1
+    assert new[K].spell_start == date(2026, 12, 1) and new[K].first_seen == date(2026, 10, 1)
+
+
+def test_reappeared_from_delisted_resets_absence():
+    prev = state("1", status="delisted", absent_since=D1, delisted_date=D1, missing_streak=2)
+    new, events = run([prev], cards=[card("1")], day=D2)
+    assert [e.type for e in events] == ["reappeared"]
+    assert new[K].missing_streak == 0 and new[K].absent_since is None and new[K].status == "active"
+
+
+def test_reappeared_with_new_price_emits_both():
+    prev = state("1", status="removed", last_price=250000)
+    _, events = run([prev], cards=[card("1", price=200000)], day=D2)
+    assert [e.type for e in events] == ["reappeared", "price_change"]
+
+
+def test_delisted_gone_in_not_ok_segment_stays_delisted():
+    prev = state("1", status="delisted", absent_since=D1, delisted_date=D1, missing_streak=2)
+    new, events = run([prev], checks={K: "gone"}, ok={SEG: False}, day=D2)
+    assert events == [] and new[K] == prev
+
+
+def test_missing_segment_ok_entry_is_treated_as_not_ok():
+    prev = state("1")
+    new, events = run([prev], checks={K: "gone"}, ok={})
+    assert events == [] and new[K] == prev
+
+
+def test_alive_error_alive_still_delists_from_first_alive_day():
+    d1, _ = run([state("1")], checks={K: "alive"}, day=D1)
+    d2, _ = run(d1, checks={K: "error"}, day=D2)
+    d3, events = run(d2, checks={K: "alive"}, day=date(2026, 10, 28))
+    assert [e.type for e in events] == ["delisted"] and d3[K].delisted_date == D1
+
+
+def test_not_ok_segment_protects_even_with_alive_checks():
+    d1, _ = run([state("1")], checks={K: "alive"}, ok={SEG: False}, day=D1)
+    d2, events = run(d1, checks={K: "alive"}, ok={SEG: False}, day=D2)
+    assert events == [] and d2[K].status == "active" and d2[K].missing_streak == 0
+
+
+def test_present_card_overwrites_scope_and_fingerprint():
+    prev = state("1", in_scope=True, last_fingerprint="vecchia")
+    new, _ = run([prev], cards=[card("1", title="Appartamento all'asta a Milano", is_auction=True)])
+    assert new[K].in_scope is False and new[K].exclusion_reason == "auction" and new[K].last_fingerprint != "vecchia"
+
+
+def test_removed_absent_stays_removed_silently():
+    prev = state("1", status="removed", detail_gone_date=D1)
+    for check in ("gone", "alive"):
+        new, events = run([prev], checks={K: check}, day=D2)
+        assert events == [] and new[K] == prev
+
+
+def test_detail_for_absent_alive_listing_updates_last_detail():
+    new, _ = run([state("1", last_detail_date=date(2026, 10, 1))], details=[detail("1")], checks={K: "alive"})
+    assert new[K].last_detail_date == D1
