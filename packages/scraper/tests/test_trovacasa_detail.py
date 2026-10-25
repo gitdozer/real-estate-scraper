@@ -11,7 +11,7 @@ def test_parse_detail_73623446():
     assert d.price_eur == 235000 and d.price_on_request is False
     assert d.surface_m2 == 105.0 and d.rooms == 4 and d.bathrooms == 2
     assert d.listing_code == "TC73623446" and d.agency_reference == "A.C. - BARONIVRG"
-    assert d.property_type == "Appartamento" and d.contract == "Vendita" and d.municipality == "Milano"
+    assert d.property_type == "Appartamento" and d.contract_label == "Vendita" and d.municipality == "Milano"
     assert d.address == "Milano Costantino Baroni,216"
     assert d.energy_class == "non disponibile" and d.energy_kwh_m2_year is None and d.floor is None
     assert d.agency_name == "Rozzano" and d.agency_id == "1035"
@@ -24,7 +24,7 @@ def test_parse_detail_73623446():
 
 def test_parse_detail_private_rent_with_energy_class():
     d = parse_detail_page(fx("detail_73816329.html"), "73816329")
-    assert d.contract == "Affitto" and d.price_eur == 850 and d.surface_m2 == 38.0 and d.rooms == 1
+    assert d.contract_label == "Affitto" and d.price_eur == 850 and d.surface_m2 == 38.0 and d.rooms == 1
     assert d.energy_class == "C" and d.energy_kwh_m2_year == 134.0
     assert d.agency_name == "Privato" and d.agency_id is None
     assert d.agency_reference == "133692952" and len(d.features) == 9

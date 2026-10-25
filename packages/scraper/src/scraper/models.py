@@ -55,7 +55,7 @@ class Detail(BaseModel):
     price_on_request: bool
     address: str | None
     property_type: str | None
-    contract: str | None
+    contract_label: str | None
     municipality: str | None
     listing_code: str | None
     agency_reference: str | None

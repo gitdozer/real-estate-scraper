@@ -22,7 +22,8 @@ Tutti i dati vivono su Cloudflare R2 in file Parquet (compressione zstd), partiz
 | `events/dt=YYYY-MM-DD/part-0.parquet` | eventi del giorno (nuovo, prezzo, scomparso, …) | ogni run |
 | `raw/dt=YYYY-MM-DD/raw.parquet` | HTML compresso dei dettagli nuovi/cambiati e dei primi controlli di scomparsa, per poter ri-analizzare le pagine | ogni run; conservato **90 giorni** |
 | `state/listings.parquet` | stato corrente: una riga per annuncio | sovrascritto a fine run |
-| `state/history/listings-YYYY-MM-DD.parquet` | copia dello stato **prima** del run di quel giorno, per ripristino | ogni run; conservata **30 giorni** |
+| `state/history/dt=YYYY-MM-DD/listings.parquet` | copia dello stato **prima** del run di quel giorno, per ripristino e per i rerun | primo run del giorno; conservata **30 giorni** |
+| `state/segments.parquet` | registro dei segmenti: prima e ultima raccolta completa | ogni run |
 | `runs/dt=YYYY-MM-DD/report.json` | report del run: richieste, errori, completezza, eventi, esito | ogni run |
 | `legacy/` | storico importato una tantum (CSV originale + Parquet) | una volta |
 
@@ -81,7 +82,8 @@ Percorso: `details/dt=YYYY-MM-DD/part-0.parquet`. Una riga per ogni dettaglio sc
 | `price_on_request` | bool | testo al posto del prezzo |
 | `address` | str? | indirizzo come scritto dall'inserzionista |
 | `property_type` | str? | attributo "Tipologia" |
-| `contract` | str? | attributo "Contratto" (`Vendita`/`Affitto`) |
+| `city`, `contract` | str | segmento (slug comune, `vendita`/`affitto`) |
+| `contract_label` | str? | attributo "Contratto" come scritto nella pagina (`Vendita`/`Affitto`) |
 | `municipality` | str? | attributo "Comune" |
 | `listing_code` | str? | codice annuncio della fonte (`TC<id>`) |
 | `agency_reference` | str? | **riferimento interno dell'inserzionista**: spesso resta uguale quando l'annuncio viene ripubblicato (segnale per la fase 2) |
@@ -108,6 +110,7 @@ Percorso: `photos/dt=YYYY-MM-DD/part-0.parquet`. Le immagini **non** vengono sal
 | Colonna | Tipo | Significato |
 |---|---|---|
 | `source`, `listing_id` | str | chiave dell'annuncio |
+| `city`, `contract` | str | segmento dell'annuncio |
 | `photo_index` | int | posizione della foto nell'annuncio (0 = prima) |
 | `photo_id` | str | ID della foto sulla fonte |
 | `phash` | str | impronta percettiva pHash a 64 bit (16 caratteri esadecimali) |
@@ -160,6 +163,29 @@ Percorso: `events/dt=YYYY-MM-DD/part-0.parquet`.
 | `delisted_date` | date? | idem: primo giorno di assenza confermata |
 
 Filtrando `type in ('removed', 'delisted')` si ottiene l'elenco delle "vendite" con le loro date (vedi [logica-scomparse.md](logica-scomparse.md)).
+
+## segments — registro dei segmenti
+
+Percorso: `state/segments.parquet`. Una riga per (fonte, comune, contratto).
+
+| Colonna | Tipo | Significato |
+|---|---|---|
+| `source`, `city`, `contract` | str | segmento |
+| `first_complete_run` | date? | primo giorno con raccolta completa. Gli annunci nuovi nei 7 giorni successivi sono marcati `first_seen_censored` (probabilmente già online prima) |
+| `last_complete_run` | date? | ultimo giorno con raccolta completa |
+
+## raw — HTML grezzo (90 giorni)
+
+Percorso: `raw/dt=YYYY-MM-DD/raw.parquet`. Serve a ri-analizzare le pagine se il parser aveva un errore, e a capire come il sito presenta gli annunci rimossi.
+
+| Colonna | Tipo | Significato |
+|---|---|---|
+| `source`, `listing_id`, `city`, `contract` | str | annuncio e segmento |
+| `reason` | str | motivo del download (`new`, `changed`, `never_detailed`, oppure controllo di assenza con esito 404 o redirect: primi 50 per run) |
+| `url`, `final_url` | str | URL richiesto e URL finale dopo eventuali redirect |
+| `status` | int | codice HTTP |
+| `html` | str | pagina completa (compressa dal Parquet) |
+| `run_date` | date | giorno |
 
 ## Storia dello schema
 

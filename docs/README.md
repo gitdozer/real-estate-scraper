@@ -6,7 +6,7 @@ Se riprendi il progetto dopo tempo, leggi in quest'ordine:
 2. [architettura.md](architettura.md) — come funziona la raccolta giornaliera.
 3. [dizionario-dati.md](dizionario-dati.md) — ogni file e colonna raccolti: significato, tipo, origine.
 4. [logica-scomparse.md](logica-scomparse.md) — come si decide che un annuncio è nuovo, cambiato, scomparso o ricomparso.
-5. [runbook.md](runbook.md) — come eseguire, ripristinare, aggiungere un comune. *(in arrivo)*
+5. [runbook.md](runbook.md) — come eseguire, ripristinare, aggiungere un comune, cosa fare in caso di errore.
 
 Approfondimenti:
 

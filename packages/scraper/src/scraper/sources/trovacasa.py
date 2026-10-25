@@ -171,7 +171,7 @@ def parse_detail_page(html: str, listing_id: str) -> Detail:
         price_on_request=price is None and bool(price_text),
         address=attributes.get("Indirizzo") or (_text(tree.css_first("a.indirizzo")) or None),
         property_type=attributes.get("Tipologia"),
-        contract=attributes.get("Contratto"),
+        contract_label=attributes.get("Contratto"),
         municipality=attributes.get("Comune"),
         listing_code=attributes.get("Codice annuncio"),
         agency_reference=attributes.get("Riferimento") or None,

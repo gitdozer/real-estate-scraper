@@ -35,6 +35,10 @@ Il codice non dipende da GitHub Actions: lo stesso comando gira su qualsiasi mac
 | `planner.py` | quali dettagli e quali foto scaricare oggi |
 | `quality.py` | completezza dei segmenti e allarme calo |
 | `photos.py` | impronte percettive delle foto |
+| `frames.py` | schemi espliciti delle tabelle Parquet |
+| `pipeline.py` | il run giornaliero (`run_daily`) |
+| `report.py` | riepilogo aggregato per GitHub |
+| `cli.py` | riga di comando (vedi `runbook.md`) |
 
 ## Rete
 
@@ -82,3 +86,17 @@ Delle foto si calcola solo l'impronta percettiva; le immagini non si salvano. Or
 1. annunci **nuovi** (non censurati): prime `photos_new` = 6 foto;
 2. annunci con **elenco foto cambiato**: prime 6 foto;
 3. **arretrato** (annunci attivi con meno impronte del dovuto: mai calcolate, o interrotte a metà), dal più vecchio: prime `photos_backlog` = 3 foto per gli annunci censurati (già online all'avvio), prime 6 per gli altri.
+
+## Il run giornaliero (`pipeline.run_daily`)
+
+1. **Stato di partenza.** Si legge `state/listings.parquet`. Se oggi esiste già un report (rerun), per i segmenti raccolti si riparte dalla copia dello stato *prima* del primo run di oggi (`state/history/dt=<oggi>/`).
+2. **Elenchi.** Tutti i segmenti in parallelo: pagina 1 (totale dichiarato), poi le pagine fino a `ceil(totale/24) + 1`. Un 404 oltre la prima pagina è la fine dell'elenco; altri errori dopo i tentativi contano come pagine fallite. Schede deduplicate per chiave.
+3. **Completezza** di ogni segmento (`quality.segment_ok`, vedi `logica-scomparse.md`).
+4. **Censura.** I segmenti con prima raccolta completa da meno di 7 giorni (o mai) marcano i nuovi annunci come `first_seen_censored`.
+5. **Dettagli** in ordine di priorità, a blocchi di 500, fino all'85% del tempo massimo. Esiti dei controlli di assenza: 200 → `alive` (se la pagina rimanda altrove: `alive` senza dettaglio), 404/410 → `gone`, altro → `error`.
+6. **Stato ed eventi** (`state.reconcile`).
+7. **Foto** fino al 90% del tempo massimo, su un client separato (server immagini diverso).
+8. **Scrittura** (salvo `--dry-run`): partizioni del giorno → copia dello stato precedente → nuovo stato → registro segmenti → report; poi pulizia di `raw/` (90 giorni) e `state/history/` (30 giorni).
+9. **Esito:** codice 1 se un segmento non è completo, calo degli attivi > 5% o circuito aperto sul sito.
+
+I log contengono solo conteggi: i log delle librerie HTTP (che stamperebbero gli URL) sono silenziati.

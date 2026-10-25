@@ -76,3 +76,9 @@ Annunci al 2026-10-25:
 | Marnate | 60 | 4 |
 
 Velocità (da rete domestica, pagine elenco di Milano): 1 connessione → 2,5 richieste/s; 4 → 11; 8 → 20; 16 → 31; nessun errore su 710 richieste. Con 16 connessioni la latenza mediana sale da 0,35 a 0,46 s: il server inizia a soffrire. Default scelto: 6 connessioni.
+
+## Prove reali della pipeline
+
+| Data | Dove | Perimetro | Risultato |
+|---|---|---|---|
+| 2026-10-25 | PC locale | Gorla Minore + Marnate, vendita e affitto | 147 annunci, 4 segmenti completi, 105 dettagli, 311 impronte foto, ~20 s, 0 errori. Aste: 39 su 140 in vendita (28%) |
