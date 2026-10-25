@@ -4,7 +4,7 @@ import re
 
 from selectolax.lexbor import LexborHTMLParser as HTMLParser, LexborNode as Node
 
-from scraper.models import Card, ListPage
+from scraper.models import Card, Detail, ListPage
 
 NAME = "trovacasa"
 BASE_URL = "https://www.trovacasa.it"
@@ -118,6 +118,80 @@ def parse_list_page(html: str, city: str, contract: str, page: int) -> ListPage:
     return ListPage(cards=cards, declared_total=declared)
 
 
+_LAT = re.compile(r"var latitude = (-?[\d.]+);")
+_LON = re.compile(r"var longitude = (-?[\d.]+);")
+_AGENCY_ID = re.compile(r"-tc-(\d+)")
+_FEATURES_TERM = "Altre caratteristiche"
+
+
+def _to_int(text: str | None) -> int | None:
+    n = _to_number(text or "")
+    return int(n) if n is not None else None
+
+
+def _energy(dd: Node | None) -> tuple[str | None, float | None]:
+    """'<span class="ce c">C </span> 134,00 kWh/m² anno' → ('C', 134.0); 'non disponibile' → ('non disponibile', None)."""
+    if dd is None:
+        return None, None
+    label = dd.css_first("span.ce")
+    if label is None:
+        return (_text(dd) or None), None
+    rest = _text(dd).replace(_text(label), "", 1)
+    return _text(label) or None, _to_number(rest)
+
+
+def parse_detail_page(html: str, listing_id: str) -> Detail:
+    tree = HTMLParser(html)
+
+    attributes: dict[str, str] = {}
+    energy_dd = None
+    for row in tree.css("dl.row"):
+        term = _text(row.css_first("dt.term")).rstrip(":").strip()
+        dd = row.css_first("dd.description")
+        if not term or term == _FEATURES_TERM:
+            continue
+        if term == "Classe energetica":
+            energy_dd = dd
+        attributes[term] = _text(dd)
+
+    price_text = attributes.get("Prezzo") or _text(tree.css_first("span.price"))
+    price = _to_number(price_text)
+    energy_class, energy_kwh = _energy(energy_dd)
+
+    agency = tree.css_first(".agenzia__name")
+    agency_href = agency.attributes.get("href") if agency is not None else None
+    agency_match = _AGENCY_ID.search(agency_href or "")
+    lat, lon = _LAT.search(html), _LON.search(html)
+
+    return Detail(
+        source=NAME,
+        listing_id=listing_id,
+        title=_text(tree.css_first("h1.immobile__title")) or None,
+        price_eur=int(price) if price is not None else None,
+        price_on_request=price is None and bool(price_text),
+        address=attributes.get("Indirizzo") or (_text(tree.css_first("a.indirizzo")) or None),
+        property_type=attributes.get("Tipologia"),
+        contract=attributes.get("Contratto"),
+        municipality=attributes.get("Comune"),
+        listing_code=attributes.get("Codice annuncio"),
+        agency_reference=attributes.get("Riferimento") or None,
+        surface_m2=_to_number(attributes.get("Superficie", "")),
+        rooms=_to_int(attributes.get("Numero locali")),
+        bathrooms=_to_int(attributes.get("Numero bagni")),
+        floor=attributes.get("Piano") or None,
+        energy_class=energy_class,
+        energy_kwh_m2_year=energy_kwh,
+        features=[_text(t) for t in tree.css("a.immobileDetails__tagLabel") if _text(t)],
+        attributes=attributes,
+        description=_text(tree.css_first("p.immobileDetails__text")) or None,
+        agency_name=_text(agency) or None,
+        agency_id=agency_match.group(1) if agency_match else None,
+        agency_address=_text(tree.css_first("p.agenzia__address")) or None,
+        latitude=float(lat.group(1)) if lat else None,
+        longitude=float(lon.group(1)) if lon else None,
+    )
+
+
 class _Trovacasa:
     """Implementazione di sources.base.Source per trovacasa.it."""
 
@@ -126,6 +200,7 @@ class _Trovacasa:
     list_url = staticmethod(list_url)
     detail_url = staticmethod(detail_url)
     parse_list_page = staticmethod(parse_list_page)
+    parse_detail_page = staticmethod(parse_detail_page)
     photo_url = staticmethod(photo_url)
 
 

@@ -2,7 +2,7 @@
 
 from typing import Protocol
 
-from scraper.models import ListPage
+from scraper.models import Detail, ListPage
 
 
 class Source(Protocol):
@@ -12,5 +12,9 @@ class Source(Protocol):
     def list_url(self, city_slug: str, contract: str, page: int) -> str: ...
 
     def parse_list_page(self, html: str, city: str, contract: str, page: int) -> ListPage: ...
+
+    def detail_url(self, path_or_id: str) -> str: ...
+
+    def parse_detail_page(self, html: str, listing_id: str) -> Detail: ...
 
     def photo_url(self, photo_id: str) -> str: ...

@@ -42,7 +42,19 @@ Miniature da 70 a 135 KB.
 
 ## Pagina dettaglio
 
-*(selettori documentati con il parser del dettaglio)*
+URL: quello della scheda (`/annunci/<prov>-tc-<inserzionista>-<id>`), ~86 KB.
+
+| Dato | Dove |
+|---|---|
+| Titolo | `h1.immobile__title` (es. "Appartamento in vendita a Milano …") |
+| Tabella attributi | ogni `dl.row`: `dt.term` (con ":" finale) → `dd.description`. Attributi osservati: Tipologia, Contratto, Comune, Indirizzo, Codice annuncio (`TC<id>`), Riferimento (codice interno dell'inserzionista), Prezzo, Superficie, Numero locali, Numero bagni, Classe energetica, Altre caratteristiche. **Il piano non compare** nei campioni (solo, a volte, come caratteristica "Ultimo Piano"). |
+| Classe energetica | `dd` con `span.ce` (es. "C") seguito dal consumo "134,00 kWh/m² anno"; oppure il testo "non disponibile" |
+| Caratteristiche | `a.immobileDetails__tagLabel` (dentro "Altre caratteristiche") |
+| Descrizione | `p.immobileDetails__text` |
+| Inserzionista | `.agenzia__name` (testo; per le agenzie è un link `/agenzie-immobiliari/<nome>-tc-<id>`, per i privati il testo è "Privato" senza link), indirizzo in `p.agenzia__address` |
+| Coordinate | nello script della mappa: `var latitude = 45.40…;` `var longitude = 9.16…;` |
+
+Telefoni ed email **non** vengono estratti.
 
 ## Annuncio rimosso
 

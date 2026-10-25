@@ -45,6 +45,38 @@ Percorso: `observations/dt=YYYY-MM-DD/part-0.parquet`. Contiene **tutte** le sch
 | `run_date` | date | giorno della raccolta |
 | `source_run` | str | `daily` per la raccolta normale, `legacy` per l'import dello storico |
 
+## details — dati della pagina di dettaglio
+
+Percorso: `details/dt=YYYY-MM-DD/part-0.parquet`. Una riga per ogni dettaglio scaricato quel giorno (nuovi, cambiati, rotazione settimanale, controlli di scomparsa con risposta 200). I campi tipizzati sono estratti dalla tabella attributi; `attributes` conserva comunque tutte le coppie originali.
+
+| Colonna | Tipo | Significato |
+|---|---|---|
+| `source`, `listing_id` | str | chiave dell'annuncio |
+| `title` | str? | titolo della pagina (es. "Appartamento in vendita a Milano …") |
+| `price_eur` | int? | prezzo richiesto (affitto: canone mensile) |
+| `price_on_request` | bool | testo al posto del prezzo |
+| `address` | str? | indirizzo come scritto dall'inserzionista |
+| `property_type` | str? | attributo "Tipologia" |
+| `contract` | str? | attributo "Contratto" (`Vendita`/`Affitto`) |
+| `municipality` | str? | attributo "Comune" |
+| `listing_code` | str? | codice annuncio della fonte (`TC<id>`) |
+| `agency_reference` | str? | **riferimento interno dell'inserzionista**: spesso resta uguale quando l'annuncio viene ripubblicato (segnale per la fase 2) |
+| `surface_m2` | float? | superficie in m² |
+| `rooms` | int? | numero di locali |
+| `bathrooms` | int? | numero di bagni |
+| `floor` | str? | attributo "Piano", se presente (raro) |
+| `energy_class` | str? | classe energetica (`A4`…`G`) oppure "non disponibile" |
+| `energy_kwh_m2_year` | float? | consumo dichiarato in kWh/m² anno |
+| `features` | list[str] | "Altre caratteristiche" (Ascensore, Cantina, Arredato, …) |
+| `attributes` | map[str,str] | tutte le coppie della tabella attributi, testo originale |
+| `description` | str? | descrizione completa |
+| `agency_name` | str? | nome dell'inserzionista ("Privato" per i privati) |
+| `agency_id` | str? | ID agenzia sulla fonte (nullo per i privati) |
+| `agency_address` | str? | indirizzo dell'agenzia |
+| `latitude`, `longitude` | float? | coordinate della mappa (precisione dichiarata dall'inserzionista) |
+| `detail_hash` | str | impronta di tutti i campi sopra: cambia se cambia qualcosa nel dettaglio |
+| `run_date` | date | giorno della raccolta |
+
 ## Storia dello schema
 
 | Versione | Data | Modifica |

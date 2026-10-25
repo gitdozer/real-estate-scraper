@@ -42,6 +42,36 @@ class Card(BaseModel):
         return (self.source, self.city, self.contract)
 
 
+class Detail(BaseModel):
+    """Dati della pagina di dettaglio di un annuncio."""
+
+    source: str
+    listing_id: str
+    title: str | None
+    price_eur: int | None
+    price_on_request: bool
+    address: str | None
+    property_type: str | None
+    contract: str | None
+    municipality: str | None
+    listing_code: str | None
+    agency_reference: str | None
+    surface_m2: float | None
+    rooms: int | None
+    bathrooms: int | None
+    floor: str | None
+    energy_class: str | None
+    energy_kwh_m2_year: float | None
+    features: list[str]
+    attributes: dict[str, str]
+    description: str | None
+    agency_name: str | None
+    agency_id: str | None
+    agency_address: str | None
+    latitude: float | None
+    longitude: float | None
+
+
 class ListPage(BaseModel):
     cards: list[Card]
     declared_total: int | None

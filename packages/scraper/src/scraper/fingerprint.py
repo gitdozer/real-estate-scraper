@@ -3,7 +3,7 @@
 import hashlib
 import json
 
-from scraper.models import Card
+from scraper.models import Card, Detail
 
 
 def _hash16(payload: object) -> str:
@@ -24,6 +24,11 @@ def card_fingerprint(card: Card) -> str:
             card.photo_ids,
         ]
     )
+
+
+def detail_hash(detail: Detail) -> str:
+    """Cambia se cambia un qualsiasi dato della pagina di dettaglio."""
+    return _hash16(detail.model_dump(exclude={"source"}))
 
 
 def photo_ids_hash(ids: list[str]) -> str:
