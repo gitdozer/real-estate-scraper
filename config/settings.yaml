@@ -25,6 +25,7 @@ delisted_recheck_days: 7     # ogni quanti giorni ricontrollare il dettaglio di 
 
 # --- Conservazione ---
 raw_retention_days: 90       # giorni di conservazione dell'HTML grezzo
+raw_max_per_run: 3000        # pagine HTML grezze (nuovi/cambiati) conservate per run: limita memoria e spazio
 state_history_days: 30       # giorni di conservazione delle copie dello stato
 
 # --- Esecuzione ---

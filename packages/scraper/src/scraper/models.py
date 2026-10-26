@@ -143,3 +143,4 @@ class Event(BaseModel):
 class ListPage(BaseModel):
     cards: list[Card]
     declared_total: int | None
+    skipped_cards: int = 0  # schede senza link o senza ID, scartate

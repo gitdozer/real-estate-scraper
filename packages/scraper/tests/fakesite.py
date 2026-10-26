@@ -101,6 +101,7 @@ class FakeSite:
         self.failing_pages: set[tuple[str, str, int]] = set()
         self.declared_override: dict[tuple[str, str], int] = {}
         self.extra_on_page: dict[tuple[str, str, int], list[str]] = {}
+        self.missing_pages: set[tuple[str, str, int]] = set()  # pagine che rispondono 404
         self.requests: list[str] = []
 
     def _page_ids(self, slug: str, contract: str, page: int) -> list[str]:
@@ -120,6 +121,8 @@ class FakeSite:
             page = int(request.url.params.get("page", "1"))
             if (slug, contract, page) in self.failing_pages:
                 return httpx.Response(503)
+            if (slug, contract, page) in self.missing_pages:
+                return httpx.Response(404)
             ids = self._page_ids(slug, contract, page)
             if page > 1 and not ids:
                 return httpx.Response(404)

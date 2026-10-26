@@ -32,10 +32,14 @@ def test_parse_detail_private_rent_with_energy_class():
 
 
 def test_parse_detail_missing_blocks_returns_nones():
-    d = parse_detail_page("<html><body><h1 class='immobile__title headingOne'>Titolo</h1></body></html>", "1")
+    minimal = (
+        "<html><body><h1 class='immobile__title headingOne'>Titolo</h1>"
+        "<dl class='row'><dt class='term'>Codice annuncio:</dt><dd class='description'>TC1</dd></dl></body></html>"
+    )
+    d = parse_detail_page(minimal, "1")
     assert d.title == "Titolo"
     assert d.price_eur is None and d.latitude is None and d.agency_name is None
-    assert d.features == [] and d.attributes == {} and d.description is None
+    assert d.features == [] and d.attributes == {"Codice annuncio": "TC1"} and d.description is None
 
 
 def test_detail_hash_changes_with_description():

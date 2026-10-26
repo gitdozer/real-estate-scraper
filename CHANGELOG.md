@@ -7,5 +7,6 @@ Modifiche per componente. Versioni [SemVer](https://semver.org/lang/it/), tag `<
 ### 0.1.0 — 2026-10-25
 - Raccolta giornaliera da trovacasa.it: elenchi, dettagli, impronte foto, stato ed eventi, controlli di qualità, CLI `run`/`status`/`import-legacy`; import dello storico Milano del 2026-10-17.
 - Robustezza (revisione indipendente): riesecuzione corretta anche dopo un run interrotto, rifiuto delle date passate, errori di lettura gestiti pagina per pagina, calo di un segmento accettato dopo 3 run, errori imprevisti senza dati nei log pubblici.
+- Revisione finale: elaborazione a blocchi (memoria limitata al bootstrap), HTML grezzo compresso e limitato, 401/403/451 trattati come blocco, codici HTTP nel riepilogo, pagine di dettaglio non riconosciute = errore, comuni con 0/1 annuncio, action GitHub fissate a un commit e dipendenze `--locked`.
 - Workflow GitHub Actions: test a ogni push, raccolta giornaliera (02:17 UTC) e avvio manuale.
 - Struttura del monorepo, configurazione dei comuni (`config/cities.yaml`) e dei parametri (`config/settings.yaml`).

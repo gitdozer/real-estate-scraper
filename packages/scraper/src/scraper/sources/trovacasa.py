@@ -10,7 +10,8 @@ NAME = "trovacasa"
 BASE_URL = "https://www.trovacasa.it"
 PAGE_SIZE = 24
 
-_DECLARED_TOTAL = re.compile(r"([\d.]+) case in (?:vendita|affitto) a")
+_DECLARED_TOTAL = re.compile(r"([\d.]+) cas[ae] in (?:vendita|affitto) a")
+_NO_RESULTS = "Nessun risultato"
 _LISTING_URL = re.compile(r"-(\d+)-(\d+)/?$")
 _TITLE_MARKERS = (" da privato", " all'asta", " all’asta")
 
@@ -58,13 +59,15 @@ def _property_type(title: str, city_slug: str) -> str | None:
     return title[:cut].strip() if cut > 0 else (title.strip() or None)
 
 
-def _parse_card(node: Node, city: str, contract: str, page: int, position: int) -> Card:
+def _parse_card(node: Node, city: str, contract: str, page: int, position: int) -> Card | None:
     link = node.css_first("a.card__title")
     href = link.attributes.get("href", "") if link is not None else ""
     url_match = _LISTING_URL.search(href)
     id_node = node.css_first("[data-id]")
     listing_id = id_node.attributes.get("data-id") if id_node is not None else None
     listing_id = listing_id or (url_match.group(2) if url_match else "")
+    if not href or not listing_id:
+        return None  # scheda incompleta: senza link o ID non si può seguire
 
     title = _text(link)
     lower = title.lower()
@@ -91,7 +94,7 @@ def _parse_card(node: Node, city: str, contract: str, page: int, position: int) 
         listing_id=listing_id,
         city=city,
         contract=contract,
-        url=detail_url(href) if href else "",
+        url=detail_url(href),
         title=title,
         property_type=_property_type(title, city),
         is_private=" da privato" in lower,
@@ -112,10 +115,18 @@ def _parse_card(node: Node, city: str, contract: str, page: int, position: int) 
 
 def parse_list_page(html: str, city: str, contract: str, page: int) -> ListPage:
     tree = HTMLParser(html)
-    cards = [_parse_card(n, city, contract, page, i) for i, n in enumerate(tree.css("div.card.js_card_immobile"))]
+    parsed = [_parse_card(n, city, contract, page, i) for i, n in enumerate(tree.css("div.card.js_card_immobile"))]
+    cards = [c for c in parsed if c is not None]
     m = _DECLARED_TOTAL.search(html)
-    declared = int(m.group(1).replace(".", "")) if m else None
-    return ListPage(cards=cards, declared_total=declared)
+    if m:
+        declared = int(m.group(1).replace(".", ""))
+    elif page == 1 and not parsed and _NO_RESULTS in html:
+        declared = 0  # comune senza annunci: la pagina dice "Nessun risultato"
+    elif page == 1 and 0 < len(parsed) < PAGE_SIZE:
+        declared = len(parsed)  # con 1 annuncio il sito non scrive il numero ("case in affitto a …")
+    else:
+        declared = None
+    return ListPage(cards=cards, declared_total=declared, skipped_cards=len(parsed) - len(cards))
 
 
 _LAT = re.compile(r"var latitude = (-?[\d.]+);")
@@ -153,6 +164,11 @@ def parse_detail_page(html: str, listing_id: str) -> Detail:
         if term == "Classe energetica":
             energy_dd = dd
         attributes[term] = _text(dd)
+
+    # Una pagina senza il codice di questo annuncio non è il suo dettaglio (pagina di errore,
+    # verifica anti-bot, sito ridisegnato): meglio un errore che un dettaglio vuoto.
+    if attributes.get("Codice annuncio") != f"TC{listing_id}":
+        raise ValueError("pagina di dettaglio non riconosciuta")
 
     price_text = attributes.get("Prezzo") or _text(tree.css_first("span.price"))
     price = _to_number(price_text)

@@ -20,6 +20,10 @@ _R2_VARS = ("R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUC
 _PARTITION_DATE = re.compile(r"/dt=(\d{4}-\d{2}-\d{2})/")
 
 
+class ConfigError(RuntimeError):
+    """Configurazione mancante o sbagliata (es. variabili d'ambiente di R2). Il messaggio è sicuro da stampare."""
+
+
 class Storage(Protocol):
     def read_bytes(self, key: str) -> bytes | None: ...
 
@@ -78,7 +82,7 @@ class R2Storage:
     def from_env(cls) -> "R2Storage":
         missing = [v for v in _R2_VARS if not os.environ.get(v)]
         if missing:
-            raise RuntimeError(f"Variabili d'ambiente mancanti per R2: {', '.join(missing)}")
+            raise ConfigError(f"Variabili d'ambiente mancanti per R2: {', '.join(missing)}")
         return cls(*(os.environ[v] for v in _R2_VARS))
 
     def read_bytes(self, key: str) -> bytes | None:

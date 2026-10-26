@@ -12,7 +12,7 @@ Ricognizione del 2026-10-25. Codice: `packages/scraper/src/scraper/sources/trova
 
 - URL: `https://www.trovacasa.it/case-in-{vendita|affitto}/{slug-comune}` per la pagina 1; `…?page=N` dalla 2 in poi. **`?page=1` risponde 301**, quindi la pagina 1 si chiede senza parametro.
 - 24 annunci per pagina; paginazione completa fino all'ultima pagina; oltre l'ultima → 404.
-- Totale dichiarato nel testo: "17.430 case in vendita a Milano" (regex `([\d.]+) case in (vendita|affitto) a`). Serve al controllo di completezza.
+- Totale dichiarato nel testo: "17.430 case in vendita a Milano" (regex `([\d.]+) cas[ae] in (vendita|affitto) a`). Serve al controllo di completezza. Casi particolari verificati il 2026-10-26: con **1 annuncio** il numero non compare ("case in affitto a Zerbolò") e il totale si ricava dalle schede della pagina 1; con **0 annunci** la pagina risponde 200 con "Nessun risultato" e il totale è 0. Fixture: `list_zerbolo_affitto_one.html`, `list_morimondo_affitto_none.html`.
 - La categoria "case" contiene appartamenti, loft, attici, ville, ville a schiera, case indipendenti, rustici… ma anche **aste** e **interi stabili/palazzi** (esclusi dal perimetro, vedi `scope.py`).
 
 ### Scheda (`div.card.js_card_immobile`)
@@ -58,7 +58,7 @@ Telefoni ed email **non** vengono estratti.
 
 ## Annuncio rimosso
 
-Un ID inesistente risponde **404**. Il comportamento per un annuncio realmente rimosso va verificato sui primi casi raccolti (si salva l'HTML dei primi controlli, vedi `logica-scomparse.md`).
+Un ID inesistente risponde **404**. Una pagina di dettaglio è considerata valida solo se contiene il proprio "Codice annuncio" `TC<id>`; altrimenti (pagina di errore, verifica anti-bot, sito ridisegnato) conta come errore, non come dettaglio vuoto. Il comportamento per un annuncio realmente rimosso va verificato sui primi casi raccolti (si salva l'HTML dei primi controlli, vedi `logica-scomparse.md`).
 
 ## Volumi e velocità misurati
 

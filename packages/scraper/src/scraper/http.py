@@ -4,7 +4,9 @@ Regole:
 - si ritentano errori di rete/timeout, risposte 5xx e 429, e il redirect del sito
   verso /Error/... (errori 500 intermittenti di trovacasa);
 - 404 e gli altri 4xx sono risposte definitive, non errori: un 404 è l'informazione
-  "annuncio rimosso" e non deve frenare la raccolta;
+  "annuncio rimosso" e non deve frenare la raccolta. Fanno eccezione 401/403/451
+  (accesso negato: il sito ci sta bloccando), che contano come fallimenti e azionano
+  il freno e il circuito: se una fonte blocca, la si abbandona;
 - se nelle ultime `error_window` richieste i fallimenti definitivi superano
   `error_threshold`, la concorrenza si dimezza; se succede di nuovo a concorrenza 1
   si apre il circuito (CircuitOpen) e il run si ferma in modo pulito.
@@ -33,6 +35,7 @@ BROWSER_HEADERS = {
 }
 
 _MAX_BACKOFF_S = 30.0
+_BLOCKED = (401, 403, 451)
 
 
 @dataclass
@@ -150,19 +153,22 @@ class Fetcher:
                         error = f"http_{status}"
                         retry_after = _parse_retry_after(resp.headers.get("Retry-After"))
                     else:
-                        self._record(failed=False)
+                        blocked = status in _BLOCKED
+                        if blocked:
+                            self._counts["failures"] += 1
+                        self._record(failed=blocked)
                         return FetchResult(
                             url=url,
                             status=status,
                             text=None if binary else resp.text,
                             content=resp.content if binary else None,
                             final_url=final_url,
-                            error=None,
+                            error=f"http_{status}" if blocked else None,
                             attempts=attempt,
                         )
             if attempt < self._settings.max_retries:
                 self._counts["retries"] += 1
-                wait = retry_after if retry_after is not None else min(_MAX_BACKOFF_S, 2.0**attempt) + random.uniform(0, 1)
+                wait = min(_MAX_BACKOFF_S, retry_after) if retry_after is not None else min(_MAX_BACKOFF_S, 2.0**attempt) + random.uniform(0, 1)
                 await self._sleep(wait)
         self._counts["failures"] += 1
         self._record(failed=True)

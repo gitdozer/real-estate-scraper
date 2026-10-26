@@ -55,7 +55,7 @@ Client: `http.Fetcher` (httpx asincrono), header da browser reale, compressione 
 
 **Cosa si ritenta:** errori di rete e timeout, risposte 5xx e 429, e il redirect del sito verso `/Error/InternalServerError` (errori 500 intermittenti). L'attesa tra un tentativo e l'altro è quella indicata da `Retry-After`, altrimenti 2, 4, 8… secondi (massimo 30) più una piccola variazione casuale.
 
-**Cosa non si ritenta:** 404 e gli altri 4xx. Un 404 non è un errore: è l'informazione "annuncio rimosso", e non conta nel tasso di errori.
+**Cosa non si ritenta:** 404 e gli altri 4xx. Un 404 non è un errore: è l'informazione "annuncio rimosso", e non conta nel tasso di errori. Fanno eccezione **401, 403 e 451** (accesso negato): non si ritentano ma contano come fallimenti, quindi azionano il freno e il circuito — se la fonte ci blocca, il run si ferma. `Retry-After` è rispettato fino a un massimo di 30 secondi.
 
 **Freno adattivo:** quando la finestra delle ultime `error_window` richieste è piena e i fallimenti definitivi (dopo tutti i tentativi) superano `error_threshold`, la concorrenza si dimezza (6 → 3 → 1). Se succede di nuovo con concorrenza 1, il client solleva `CircuitOpen`: il run si ferma in modo pulito, scrive quanto raccolto e **non registra scomparse**.
 
@@ -93,10 +93,12 @@ Delle foto si calcola solo l'impronta percettiva; le immagini non si salvano. Or
 2. **Elenchi.** Tutti i segmenti in parallelo: pagina 1 (totale dichiarato), poi le pagine fino a `ceil(totale/24) + 1`. Un 404 oltre la prima pagina è la fine dell'elenco; altri errori dopo i tentativi, o una pagina che il parser non riesce a leggere, contano come pagine fallite. Se il circuito si apre si tengono le schede già lette. Schede deduplicate per chiave.
 3. **Completezza** di ogni segmento (`quality.segment_ok`, vedi `logica-scomparse.md`).
 4. **Censura.** I segmenti con prima raccolta completa da meno di 7 giorni (o mai) marcano i nuovi annunci come `first_seen_censored`.
-5. **Dettagli** in ordine di priorità, a blocchi di 500, fino all'85% del tempo massimo. Esiti dei controlli di assenza: 200 → `alive` (se la pagina rimanda altrove: `alive` senza dettaglio), 404/410 → `gone`, altro o pagina non leggibile → `error`. Un annuncio `changed` il cui dettaglio non arriva conserva l'impronta vecchia, così il giorno dopo il dettaglio viene richiesto di nuovo.
+5. **Dettagli** in ordine di priorità, a blocchi di 500, fino all'85% del tempo massimo. Ogni blocco viene elaborato **prima** di scaricare il successivo, così in memoria resta un solo blocco di pagine (al bootstrap i dettagli sono ~35.000: misurato ~145 MB di picco con 6.000 pagine simulate da 170 KB). L'HTML conservato in `raw/` viene compresso subito ed è limitato a `raw_max_per_run` pagine. Una pagina di dettaglio senza il codice `TC<id>` dell'annuncio (errore, verifica anti-bot, sito ridisegnato) conta come errore; se gli errori superano 20 e il 10% dei dettagli tentati scatta l'avviso `details_errors`. Esiti dei controlli di assenza: 200 → `alive` (se la pagina rimanda altrove: `alive` senza dettaglio), 404/410 → `gone`, altro o pagina non leggibile → `error`. Un annuncio `changed` il cui dettaglio non arriva conserva l'impronta vecchia, così il giorno dopo il dettaglio viene richiesto di nuovo.
 6. **Stato ed eventi** (`state.reconcile`).
-7. **Foto** fino al 90% del tempo massimo, su un client separato (server immagini diverso).
+7. **Foto** fino al 90% del tempo massimo, su un client separato (server immagini diverso), a blocchi: l'impronta si calcola subito e l'immagine viene scartata.
 8. **Scrittura** (salvo `--dry-run`): copia dello stato di partenza (segna che oggi c'è stato un run) → partizioni del giorno → nuovo stato → registro segmenti → report; poi pulizia di `raw/` (90 giorni) e `state/history/` (30 giorni).
-9. **Esito:** codice 1 se un segmento non è completo, calo degli attivi > 5% o circuito aperto sul sito.
+9. **Esito:** codice 1 se un segmento non è completo, calo degli attivi > 5%, troppi errori sui dettagli o circuito aperto sul sito.
+
+Il riepilogo su GitHub riporta anche i **codici HTTP** ricevuti dal sito (solo conteggi): è il modo per accorgersi di un blocco (403).
 
 I log contengono solo conteggi: i log delle librerie HTTP (che stamperebbero gli URL) sono silenziati, e un errore imprevisto stampa solo il suo tipo (il dettaglio va in `runs/crash/` sullo storage).

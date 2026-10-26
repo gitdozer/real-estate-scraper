@@ -38,6 +38,7 @@ class Settings(BaseModel):
     drop_confirm_runs: int = Field(3, gt=0)
     delisted_recheck_days: int = Field(7, gt=0)
     raw_retention_days: int = 90
+    raw_max_per_run: int = 3000
     state_history_days: int = 30
     max_runtime_minutes: int = Field(100, gt=0)
     full_details: bool = False

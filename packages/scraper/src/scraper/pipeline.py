@@ -12,13 +12,16 @@ Flusso e garanzie in docs/architettura.md. Punti chiave:
 """
 
 import asyncio
+import gzip
 import json
 import logging
 import math
 import re
 import time
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 from datetime import UTC, date, datetime
 
 import httpx
@@ -69,6 +72,7 @@ class SegmentResult:
     pages: int
     failed_pages: int
     circuit: bool = False
+    skipped_cards: int = 0
 
 
 # --- lettura dello stato ---------------------------------------------------------
@@ -125,16 +129,30 @@ def _starting_state(current: dict, before_today: dict, scraped: set[SegmentKey])
 # --- fasi del run ------------------------------------------------------------------
 
 
-async def _chunked(fetcher: Fetcher, urls: list[str], binary: bool, deadline: float | None) -> tuple[list[FetchResult | None], bool]:
-    """Scarica a blocchi. Restituisce (risultati, circuito_aperto); i non eseguiti sono None."""
-    results: list[FetchResult | None] = []
-    for i in range(0, len(urls), CHUNK):
+async def _for_each_chunk(
+    fetcher: Fetcher,
+    items: list,
+    url_of: Callable[[Any], str],
+    binary: bool,
+    deadline: float | None,
+    handle: Callable[[Any, FetchResult | None], None],
+) -> bool:
+    """Scarica a blocchi di CHUNK richieste ed elabora ogni blocco SUBITO, prima di scaricare
+    il successivo: in memoria resta un solo blocco di pagine o immagini alla volta (al bootstrap
+    i dettagli sono ~35.000: tenerli tutti in memoria supererebbe i 16 GB del runner).
+    `handle(item, risultato)` riceve None per le richieste non eseguite (scadenza o circuito).
+    Restituisce True se il circuito si è aperto."""
+    for i in range(0, len(items), CHUNK):
+        chunk = items[i : i + CHUNK]
         try:
-            results.extend(await fetcher.get_many(urls[i : i + CHUNK], binary=binary, deadline=deadline))
+            results = await fetcher.get_many([url_of(x) for x in chunk], binary=binary, deadline=deadline)
         except CircuitOpen:
-            results.extend([None] * (len(urls) - len(results)))
-            return results, True
-    return results, False
+            for x in items[i:]:
+                handle(x, None)
+            return True
+        for x, r in zip(chunk, results):
+            handle(x, r)
+    return False
 
 
 async def _scrape_segment(fetcher: Fetcher, seg: SegmentKey, settings: Settings) -> SegmentResult:
@@ -151,6 +169,7 @@ async def _scrape_segment(fetcher: Fetcher, seg: SegmentKey, settings: Settings)
         log.warning("pagina elenco non interpretabile (%s/%s, pagina 1)", slug, contract)
         return SegmentResult(seg, [], None, 1, 1)
     declared = page1.declared_total
+    skipped = page1.skipped_cards
     n_pages = max(1, math.ceil((declared or 0) / TROVACASA.page_size))
     last = n_pages + 1  # una pagina in più: gli annunci nuovi fanno slittare gli altri durante la raccolta
     if settings.max_pages > 0:
@@ -161,19 +180,22 @@ async def _scrape_segment(fetcher: Fetcher, seg: SegmentKey, settings: Settings)
         results = await fetcher.get_many([TROVACASA.list_url(slug, contract, p) for p in pages])
     except CircuitOpen:
         # si tengono le schede della pagina 1; il segmento risulta incompleto
-        return SegmentResult(seg, cards, declared, len(pages) + 1, max(1, len(pages)), circuit=True)
+        return SegmentResult(seg, cards, declared, len(pages) + 1, max(1, len(pages)), circuit=True, skipped_cards=skipped)
     for p, r in zip(pages, results):
         if r.ok:
             try:
-                cards.extend(TROVACASA.parse_list_page(r.text, slug, contract, p).cards)
+                page = TROVACASA.parse_list_page(r.text, slug, contract, p)
             except Exception:
                 log.warning("pagina elenco non interpretabile (%s/%s, pagina %s)", slug, contract, p)
                 failed += 1
-        elif r.status == 404 and r.error is None:
-            continue  # fine dell'elenco: la completezza la giudica segment_ok
+                continue
+            cards.extend(page.cards)
+            skipped += page.skipped_cards
+        elif r.status == 404 and r.error is None and p >= n_pages:
+            continue  # fine dell'elenco (l'ultima pagina può sparire se intanto calano gli annunci)
         else:
-            failed += 1
-    return SegmentResult(seg, cards, declared, len(pages) + 1, failed)
+            failed += 1  # anche un 404 in mezzo all'elenco: mancherebbero 24 annunci
+    return SegmentResult(seg, cards, declared, len(pages) + 1, failed, skipped_cards=skipped)
 
 
 def _observation_rows(cards: dict[ListingKey, Card], run_date: date) -> list[dict]:
@@ -271,7 +293,8 @@ async def run_daily(
             ok[res.key] = good
             seg_report.append(
                 dict(source=res.key[0], city=res.key[1], contract=res.key[2], declared=res.declared, unique=by_seg[res.key],
-                     pages=res.pages, failed_pages=res.failed_pages, prev_active=prev_active[res.key], ok=good, reason=reason)
+                     pages=res.pages, failed_pages=res.failed_pages, skipped_cards=res.skipped_cards,
+                     prev_active=prev_active[res.key], ok=good, reason=reason)
             )  # fmt: skip
         for s in segments:
             ok.setdefault(s, False)
@@ -285,23 +308,26 @@ async def run_daily(
         # 3. dettagli
         tasks: list[DetailTask] = [] if circuit else plan_details(prev, cards, check_segments, settings, run_date)
         detail_deadline = t0 + 0.85 * settings.max_runtime_minutes * 60
-        results, opened = await _chunked(site, [t.url for t in tasks], False, detail_deadline)
-        if opened:
-            circuit = True
-            alerts.append("circuit_open_details")
         details: dict[ListingKey, Detail] = {}
         checks: dict[ListingKey, CheckOutcome] = {}
         raw_rows: list[dict] = []
         dstats: Counter[str] = Counter()
         error_samples: list[dict] = []
         gone_samples = 0
-        for t, r in zip(tasks, results):
+
+        def keep_raw(raw: dict, r: FetchResult) -> None:
+            # HTML compresso subito: in memoria ~15 KB per pagina invece di ~170 KB
+            html_gz = gzip.compress((r.text or "").encode("utf-8"))
+            raw_rows.append(raw | dict(final_url=r.final_url, status=r.status, html_gz=html_gz))
+
+        def handle_detail(t: DetailTask, r: FetchResult | None) -> None:
+            nonlocal gone_samples
             is_check = t.reason in _CHECK_REASONS
             seg_of = cards[t.key].segment if t.key in cards else prev[t.key].segment
             raw = dict(source=t.key[0], listing_id=t.key[1], city=seg_of[1], contract=seg_of[2], reason=t.reason, url=t.url, run_date=run_date)
             if r is None:
                 dstats["skipped_deadline"] += 1
-                continue
+                return
             if r.ok:
                 m = _LISTING_ID_IN_URL.search(httpx.URL(r.final_url or t.url).path)
                 redirected = m is None or m.group(1) != t.key[1]
@@ -314,28 +340,38 @@ async def run_daily(
                             checks[t.key] = "error"
                         if len(error_samples) < 20:
                             error_samples.append(dict(url=t.url, status=r.status, error=f"parse:{type(exc).__name__}"))
-                        continue
+                        return
                     dstats["done"] += 1
                 else:
                     dstats["redirected"] += 1
                 if is_check:
                     checks[t.key] = "alive"
-                if (t.reason in _RAW_REASONS and not redirected) or (is_check and redirected and gone_samples < RAW_GONE_SAMPLES):
-                    gone_samples += is_check
-                    raw_rows.append(raw | dict(final_url=r.final_url, status=r.status, html=r.text))
+                if t.reason in _RAW_REASONS and not redirected and dstats["raw_kept"] < settings.raw_max_per_run:
+                    dstats["raw_kept"] += 1
+                    keep_raw(raw, r)
+                elif is_check and redirected and gone_samples < RAW_GONE_SAMPLES:
+                    gone_samples += 1
+                    keep_raw(raw, r)
             elif r.status in (404, 410) and r.error is None:
                 dstats["gone"] += 1
                 if is_check:
                     checks[t.key] = "gone"
                     if gone_samples < RAW_GONE_SAMPLES:
                         gone_samples += 1
-                        raw_rows.append(raw | dict(final_url=r.final_url, status=r.status, html=r.text))
+                        keep_raw(raw, r)
             else:
                 dstats["errors"] += 1
                 if is_check:
                     checks[t.key] = "error"
                 if len(error_samples) < 20:
                     error_samples.append(dict(url=t.url, status=r.status, error=r.error))
+
+        if await _for_each_chunk(site, tasks, lambda t: t.url, False, detail_deadline, handle_detail):
+            circuit = True
+            alerts.append("circuit_open_details")
+        attempted = len(tasks) - dstats["skipped_deadline"]
+        if dstats["errors"] > max(20, 0.1 * attempted):
+            alerts.append("details_errors")  # molte pagine non scaricate o non riconosciute: sito cambiato o blocco
 
         # 4. stato ed eventi
         new_state, events = reconcile(prev, cards, details, checks, scraped, ok, censor, run_date)
@@ -349,25 +385,26 @@ async def run_daily(
         new_keys = {(e.source, e.listing_id) for e in events if e.type == "new"}
         ptasks = [] if circuit else plan_photos(new_state, cards, new_keys, settings)
         photo_deadline = t0 + 0.90 * settings.max_runtime_minutes * 60
-        presults, popened = await _chunked(images, [TROVACASA.photo_url(p.photo_id) for p in ptasks], True, photo_deadline)
-        if popened:
-            alerts.append("circuit_open_photos")
         photo_rows: list[dict] = []
         pstats: Counter[str] = Counter()
         hashed: Counter[ListingKey] = Counter()
-        for p, r in zip(ptasks, presults):
+
+        def handle_photo(p, r: FetchResult | None) -> None:
             if r is None:
                 pstats["skipped_deadline"] += 1
-                continue
+                return
             hashes = hash_image(r.content) if r.ok and r.content else None
             if hashes is None:
                 pstats["failed"] += 1
-                continue
+                return
             pstats["done"] += 1
             hashed[p.key] += 1
             c = cards[p.key]
             photo_rows.append(dict(source=p.key[0], listing_id=p.key[1], city=c.city, contract=c.contract, photo_index=p.index,
                                    photo_id=p.photo_id, phash=hashes[0], dhash=hashes[1], run_date=run_date))  # fmt: skip
+
+        if await _for_each_chunk(images, ptasks, lambda p: TROVACASA.photo_url(p.photo_id), True, photo_deadline, handle_photo):
+            alerts.append("circuit_open_photos")
         for key, n in hashed.items():
             new_state[key] = new_state[key].model_copy(update=dict(photos_done=n, photo_ids_hash=photo_ids_hash(cards[key].photo_ids)))
     finally:
@@ -397,7 +434,7 @@ async def run_daily(
         alerts.append("segments_not_ok")
     if circuit:
         alerts.append("circuit_open")
-    exit_code = 1 if ("active_drop" in alerts or "segments_not_ok" in alerts or circuit) else 0
+    exit_code = 1 if ({"active_drop", "segments_not_ok", "details_errors"} & set(alerts) or circuit) else 0
 
     report = dict(
         run_date=str(run_date),

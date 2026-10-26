@@ -42,6 +42,7 @@ def summary_markdown(report: dict) -> str:
     site = report.get("fetch", {}).get("site")
     if site:
         lines += ["", f"**Richieste al sito:** {site['requests']} · ritentate {site['retries']} · fallite {site['failures']} · concorrenza finale {site['concurrency_now']}"]
+        lines += ["", f"**Codici HTTP:** {_counts(site.get('by_status', {}))}"]  # es. 403 = il sito ci sta bloccando
     if report["alerts"]:
         lines += ["", f"**⚠️ Avvisi:** {', '.join(report['alerts'])} — vedi docs/runbook.md"]
     return "\n".join(lines) + "\n"

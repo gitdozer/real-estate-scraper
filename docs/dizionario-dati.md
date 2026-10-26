@@ -20,7 +20,7 @@ Tutti i dati vivono su Cloudflare R2 in file Parquet (compressione zstd), partiz
 | `details/dt=YYYY-MM-DD/part-0.parquet` | dettagli scaricati quel giorno | ogni run |
 | `photos/dt=YYYY-MM-DD/part-0.parquet` | impronte delle foto calcolate quel giorno | ogni run |
 | `events/dt=YYYY-MM-DD/part-0.parquet` | eventi del giorno (nuovo, prezzo, scomparso, …) | ogni run |
-| `raw/dt=YYYY-MM-DD/raw.parquet` | HTML compresso dei dettagli nuovi/cambiati e dei primi controlli di scomparsa, per poter ri-analizzare le pagine | ogni run; conservato **90 giorni** |
+| `raw/dt=YYYY-MM-DD/raw.parquet` | HTML compresso (gzip) dei dettagli nuovi/cambiati (al massimo `raw_max_per_run` = 3000 per run) e dei primi 50 controlli di scomparsa, per poter ri-analizzare le pagine | ogni run; conservato **90 giorni** |
 | `state/listings.parquet` | stato corrente: una riga per annuncio | sovrascritto a fine run |
 | `state/history/dt=YYYY-MM-DD/listings.parquet` | copia dello stato **prima** del run di quel giorno, per ripristino e per i rerun. È la prima cosa scritta: se esiste, quel giorno c'è già stato un run | primo run del giorno; conservata **30 giorni** |
 | `runs/crash/<data-ora>.txt` | dettaglio di un errore imprevisto (traceback), che non va nei log pubblici | solo in caso di errore |
@@ -28,7 +28,7 @@ Tutti i dati vivono su Cloudflare R2 in file Parquet (compressione zstd), partiz
 | `runs/dt=YYYY-MM-DD/report.json` | report del run: richieste, errori, completezza, eventi, esito | ogni run |
 | `legacy/` | storico importato una tantum (CSV originale + Parquet) | una volta |
 
-Ordine di scrittura di un run: partizioni del giorno → copia dello stato precedente → nuovo stato → report. Rieseguire lo stesso giorno sovrascrive le partizioni di quel giorno.
+Ordine di scrittura di un run: copia dello stato di partenza (`state/history/dt=<giorno>/`, che segna che quel giorno c'è stato un run) → partizioni del giorno → nuovo stato → registro segmenti → report. Rieseguire lo stesso giorno sovrascrive le partizioni di quel giorno per i comuni raccolti.
 
 Lettura con DuckDB (esempio):
 
@@ -62,12 +62,12 @@ Percorso: `observations/dt=YYYY-MM-DD/part-0.parquet`. Contiene **tutte** le sch
 | `photo_ids` | list[str] | ID delle foto, nell'ordine della fonte |
 | `advertiser_id` | str? | ID dell'inserzionista (agenzia o account privato) preso dall'URL |
 | `eliminato` | bool | attributo `data-eliminato` della scheda; significato da verificare |
-| `page` | int | pagina dell'elenco in cui è stata vista |
-| `position` | int | posizione nella pagina (0–23) |
+| `page` | int? | pagina dell'elenco in cui è stata vista (nulla nelle righe `legacy`) |
+| `position` | int? | posizione nella pagina (0–23; nulla nelle righe `legacy`) |
 | `in_scope` | bool | dentro il perimetro della raccolta (vedi `scope.py`) |
 | `exclusion_reason` | str? | motivo dell'esclusione: `auction`, `whole_building`, `room` |
 | `flags` | list[str] | casi dubbi inclusi ma marcati: `new_build`, `rent_to_buy`, `investment` |
-| `fingerprint` | str | impronta della scheda (16 caratteri esadecimali): cambia se cambiano prezzo, superficie, locali, titolo, caratteristiche o foto; non dipende da pagina e posizione |
+| `fingerprint` | str? | (nulla nelle righe `legacy`) impronta della scheda (16 caratteri esadecimali): cambia se cambiano prezzo, superficie, locali, titolo, caratteristiche o foto; non dipende da pagina e posizione |
 | `run_date` | date | giorno della raccolta |
 | `source_run` | str | `daily` per la raccolta normale, `legacy` per l'import dello storico |
 
@@ -95,7 +95,7 @@ Percorso: `details/dt=YYYY-MM-DD/part-0.parquet`. Una riga per ogni dettaglio sc
 | `energy_class` | str? | classe energetica (`A4`…`G`) oppure "non disponibile" |
 | `energy_kwh_m2_year` | float? | consumo dichiarato in kWh/m² anno |
 | `features` | list[str] | "Altre caratteristiche" (Ascensore, Cantina, Arredato, …) |
-| `attributes` | map[str,str] | tutte le coppie della tabella attributi, testo originale |
+| `attributes` | str (JSON) | tutte le coppie della tabella attributi, testo originale, come oggetto JSON (`json.loads` / `json_extract` in DuckDB) |
 | `description` | str? | descrizione completa |
 | `agency_name` | str? | nome dell'inserzionista ("Privato" per i privati) |
 | `agency_id` | str? | ID agenzia sulla fonte (nullo per i privati) |
@@ -187,7 +187,7 @@ Percorso: `raw/dt=YYYY-MM-DD/raw.parquet`. Serve a ri-analizzare le pagine se il
 | `reason` | str | motivo del download (`new`, `changed`, `never_detailed`, oppure controllo di assenza con esito 404 o redirect: primi 50 per run) |
 | `url`, `final_url` | str | URL richiesto e URL finale dopo eventuali redirect |
 | `status` | int | codice HTTP |
-| `html` | str | pagina completa (compressa dal Parquet) |
+| `html_gz` | binary | pagina completa compressa con gzip (`gzip.decompress(...).decode()`) |
 | `run_date` | date | giorno |
 
 ## legacy — storico importato (una tantum)

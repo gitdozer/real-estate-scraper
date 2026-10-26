@@ -42,7 +42,7 @@ EVENTS = {
 
 RAW = {
     "source": S, "listing_id": S, "city": S, "contract": S, "reason": S, "url": S,
-    "final_url": S, "status": I, "html": S, "run_date": D,
+    "final_url": S, "status": I, "html_gz": pl.Binary, "run_date": D,
 }  # fmt: skip
 
 SEGMENTS = {

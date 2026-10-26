@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 from scraper.config import load_cities, load_settings
 from scraper.pipeline import RunOptions, RunRefused, run_daily
 from scraper.report import summary_markdown
-from scraper.storage import LocalStorage, R2Storage, Storage
+from scraper.storage import ConfigError, LocalStorage, R2Storage, Storage
 
 ROME = ZoneInfo("Europe/Rome")
 
@@ -123,6 +123,9 @@ def main(argv: list[str] | None = None) -> int:
     except RunRefused as exc:
         print(f"Run rifiutato: {exc}", file=sys.stderr)  # il messaggio contiene solo date
         return 2
+    except ConfigError as exc:
+        print(f"Configurazione: {exc}", file=sys.stderr)  # solo nomi di variabili, nessun dato
+        return 1
     except Exception as exc:
         # Il testo dell'errore può contenere dati degli annunci (URL, titoli): nel log pubblico
         # va solo il tipo; il dettaglio completo si salva nello storage, che è privato.
