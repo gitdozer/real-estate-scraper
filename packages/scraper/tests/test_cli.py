@@ -35,3 +35,29 @@ def test_http_libraries_do_not_log_urls(tmp_path):
     main(["status", "--storage", "local", "--local-root", str(tmp_path)])
     for name in ("httpx", "httpcore", "botocore", "urllib3"):
         assert logging.getLogger(name).level >= logging.WARNING, name  # impostato esplicitamente, non ereditato
+
+
+def test_crash_prints_only_error_type(tmp_path, capsys, monkeypatch):
+    import scraper.cli as cli
+
+    async def boom(*a, **k):
+        raise ValueError("titolo segreto https://www.trovacasa.it/annunci/mi-tc-1-123")
+
+    monkeypatch.setattr(cli, "run_daily", boom)
+    code = main(["run", "--storage", "local", "--local-root", str(tmp_path), "--cities", "marnate"])
+    out = capsys.readouterr()
+    assert code == 1 and "ValueError" in out.out + out.err
+    assert "segreto" not in out.out + out.err and "trovacasa.it" not in out.out + out.err
+    crash = [k for k in LocalStorage(tmp_path).list_keys("runs/") if "crash" in k]
+    assert crash and b"segreto" in LocalStorage(tmp_path).read_bytes(crash[0])
+
+
+def test_refused_run_exits_2(tmp_path, monkeypatch):
+    import scraper.cli as cli
+    from scraper.pipeline import RunRefused
+
+    async def refuse(*a, **k):
+        raise RunRefused("data precedente all'ultimo run")
+
+    monkeypatch.setattr(cli, "run_daily", refuse)
+    assert main(["run", "--storage", "local", "--local-root", str(tmp_path), "--cities", "marnate"]) == 2

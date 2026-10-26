@@ -64,3 +64,11 @@ async def test_first_live_run_after_legacy(tmp_path):
     assert state[("trovacasa", "2")].list_last_seen == date(2026, 10, 17)
     assert state[("trovacasa", "77")].first_seen_censored is True  # primo run completo del segmento
     assert all(state[("trovacasa", k)].last_detail_date == day for k in ("1", "4", "5", "77"))
+
+
+def test_import_legacy_refuses_after_live_runs_even_with_force(tmp_path):
+    s = LocalStorage(tmp_path)
+    import_legacy(CSV, s)
+    s.write_bytes("runs/dt=2026-10-26/report.json", b"{}")
+    with pytest.raises(RuntimeError):
+        import_legacy(CSV, s, force=True)

@@ -56,3 +56,16 @@ def test_normal_churn_is_not_suspicious():
     assert segment_ok(16900, 16800, 0, S, prev_active=17000) == (True, None)
     assert segment_ok(3, 3, 0, S, prev_active=4) == (True, None)
     assert segment_ok(0, 0, 0, S, prev_active=2) == (True, None)
+
+
+def test_failed_page_one_is_failed_pages_not_parser_problem():
+    assert segment_ok(None, 0, 1, S) == (False, "failed_pages")
+
+
+def test_drop_confirmed_after_consecutive_runs():
+    s = Settings(drop_confirm_runs=3)
+    assert segment_ok(6, 6, 0, s, prev_active=10, drop_runs=0) == (False, "suspicious_drop")
+    assert segment_ok(6, 6, 0, s, prev_active=10, drop_runs=1) == (False, "suspicious_drop")
+    assert segment_ok(6, 6, 0, s, prev_active=10, drop_runs=2) == (True, "drop_confirmed")
+    assert segment_ok(6, 5, 0, s, prev_active=10, drop_runs=2) == (True, "drop_confirmed")
+    assert segment_ok(60, 40, 0, s, prev_active=100, drop_runs=2) == (False, "incomplete")

@@ -4,13 +4,18 @@ Flusso e garanzie in docs/architettura.md. Punti chiave:
 - un segmento incompleto non genera scomparse (quality.segment_ok + state.reconcile);
 - il lavoro oltre la scadenza si interrompe ma i dati raccolti si scrivono comunque;
 - rieseguire lo stesso giorno riparte dallo stato di prima del run di quel giorno
-  per i segmenti raccolti, e conserva quanto già scritto per gli altri segmenti.
+  per i segmenti raccolti, e conserva quanto già scritto per gli altri segmenti;
+  la copia dello stato di partenza è la PRIMA cosa scritta: se esiste, il run è un rerun
+  (anche se il run precedente si è interrotto prima del report);
+- non si accettano date precedenti all'ultimo run (riporterebbero indietro lo stato);
+- un errore su una singola pagina non fa perdere la giornata.
 """
 
 import asyncio
 import json
 import logging
 import math
+import re
 import time
 from collections import Counter
 from dataclasses import dataclass
@@ -41,6 +46,12 @@ RAW_GONE_SAMPLES = 50  # pagine di controlli 404/redirect conservate per capire 
 CHUNK = 500  # richieste per blocco: un'interruzione (scadenza, circuito) non fa perdere i blocchi già fatti
 _CHECK_REASONS = ("absence_check", "delisted_recheck")
 _RAW_REASONS = ("new", "changed", "never_detailed")
+_LISTING_ID_IN_URL = re.compile(r"-(\d+)/?$")
+_DT = re.compile(r"/dt=(\d{4}-\d{2}-\d{2})/")
+
+
+class RunRefused(Exception):
+    """Il run non può partire senza rischiare di corrompere lo storico (es. data precedente all'ultimo run)."""
 
 
 @dataclass
@@ -57,6 +68,7 @@ class SegmentResult:
     declared: int | None
     pages: int
     failed_pages: int
+    circuit: bool = False
 
 
 # --- lettura dello stato ---------------------------------------------------------
@@ -79,6 +91,7 @@ def load_segments(storage: Storage) -> dict[SegmentKey, dict]:
     df = read_parquet(storage, SEGMENTS_KEY)
     if df is None:
         return {}
+    df = df.drop("schema_version", "scraper_version", strict=False)
     return {(r["source"], r["city"], r["contract"]): r for r in df.to_dicts()}
 
 
@@ -88,6 +101,25 @@ def _history_key(run_date: date) -> str:
 
 def _report_key(run_date: date) -> str:
     return f"runs/dt={run_date:%Y-%m-%d}/report.json"
+
+
+def _latest_run_date(storage: Storage) -> date | None:
+    found = [_DT.search("/" + k) for k in storage.list_keys("runs/") + storage.list_keys("state/history/")]
+    return max((date.fromisoformat(m.group(1)) for m in found if m), default=None)
+
+
+def _starting_state(current: dict, before_today: dict, scraped: set[SegmentKey]) -> dict[ListingKey, ListingState]:
+    """Stato di partenza di un rerun: per ogni annuncio si sceglie la versione di prima di oggi
+    se oggi riguarda un segmento raccolto in questo rerun, altrimenti quella attuale."""
+    prev: dict[ListingKey, ListingState] = {}
+    for key in set(current) | set(before_today):
+        old, now = before_today.get(key), current.get(key)
+        if old is not None:
+            touched = old.segment in scraped or (now is not None and now.segment in scraped)
+            prev[key] = old if touched or now is None else now
+        elif now is not None and now.segment not in scraped:
+            prev[key] = now  # comparso oggi in un segmento che questo rerun non tocca
+    return prev
 
 
 # --- fasi del run ------------------------------------------------------------------
@@ -107,21 +139,36 @@ async def _chunked(fetcher: Fetcher, urls: list[str], binary: bool, deadline: fl
 
 async def _scrape_segment(fetcher: Fetcher, seg: SegmentKey, settings: Settings) -> SegmentResult:
     _, slug, contract = seg
-    first = await fetcher.get(TROVACASA.list_url(slug, contract, 1))
+    try:
+        first = await fetcher.get(TROVACASA.list_url(slug, contract, 1))
+    except CircuitOpen:
+        return SegmentResult(seg, [], None, 1, 1, circuit=True)
     if not first.ok:
         return SegmentResult(seg, [], None, 1, 1)
-    page1 = TROVACASA.parse_list_page(first.text, slug, contract, 1)
+    try:
+        page1 = TROVACASA.parse_list_page(first.text, slug, contract, 1)
+    except Exception:
+        log.warning("pagina elenco non interpretabile (%s/%s, pagina 1)", slug, contract)
+        return SegmentResult(seg, [], None, 1, 1)
     declared = page1.declared_total
     n_pages = max(1, math.ceil((declared or 0) / TROVACASA.page_size))
     last = n_pages + 1  # una pagina in più: gli annunci nuovi fanno slittare gli altri durante la raccolta
     if settings.max_pages > 0:
         last = min(last, settings.max_pages)
     pages = list(range(2, last + 1))
-    results = await fetcher.get_many([TROVACASA.list_url(slug, contract, p) for p in pages])
     cards, failed = list(page1.cards), 0
+    try:
+        results = await fetcher.get_many([TROVACASA.list_url(slug, contract, p) for p in pages])
+    except CircuitOpen:
+        # si tengono le schede della pagina 1; il segmento risulta incompleto
+        return SegmentResult(seg, cards, declared, len(pages) + 1, max(1, len(pages)), circuit=True)
     for p, r in zip(pages, results):
         if r.ok:
-            cards.extend(TROVACASA.parse_list_page(r.text, slug, contract, p).cards)
+            try:
+                cards.extend(TROVACASA.parse_list_page(r.text, slug, contract, p).cards)
+            except Exception:
+                log.warning("pagina elenco non interpretabile (%s/%s, pagina %s)", slug, contract, p)
+                failed += 1
         elif r.status == 404 and r.error is None:
             continue  # fine dell'elenco: la completezza la giudica segment_ok
         else:
@@ -182,14 +229,14 @@ async def run_daily(
     segments: list[SegmentKey] = [(src, c.slugs[src], contract) for c in selected if src in c.slugs for contract in c.contracts]
     scraped = set(segments)
 
+    latest = _latest_run_date(storage)
+    if latest is not None and run_date < latest and not options.dry_run:
+        raise RunRefused(f"la data {run_date} è precedente all'ultimo run ({latest}): si può rieseguire solo l'ultimo giorno")
+
     current = load_state(storage)
-    rerun = storage.read_bytes(_report_key(run_date)) is not None
-    if rerun:
-        before_today = _read_state(storage, _history_key(run_date))
-        prev = {k: v for k, v in current.items() if v.segment not in scraped}
-        prev.update({k: v for k, v in before_today.items() if v.segment in scraped})
-    else:
-        prev = current
+    # La copia dello stato di partenza viene scritta per prima: se esiste, oggi c'è già stato un run.
+    rerun = storage.read_bytes(_history_key(run_date)) is not None
+    prev = _starting_state(current, _read_state(storage, _history_key(run_date)), scraped) if rerun else current
     seg_registry = load_segments(storage)
 
     site = Fetcher(settings.site_concurrency, settings, transport=transport, clock=clock)
@@ -197,10 +244,9 @@ async def run_daily(
     circuit = False
     try:
         # 1. elenchi
-        try:
-            seg_results = await asyncio.gather(*(_scrape_segment(site, s, settings) for s in segments))
-        except CircuitOpen:
-            circuit, seg_results = True, []
+        seg_results = list(await asyncio.gather(*(_scrape_segment(site, s, settings) for s in segments)))
+        if any(r.circuit for r in seg_results):
+            circuit = True
             alerts.append("circuit_open_lists")
 
         cards: dict[ListingKey, Card] = {}
@@ -212,8 +258,14 @@ async def run_daily(
         prev_active = Counter(s.segment for s in prev.values() if s.status == "active")
         seg_report, ok = [], {}
         by_seg = Counter(c.segment for c in cards.values())
+        drop_runs: dict[SegmentKey, int] = {}
         for res in seg_results:
-            good, reason = segment_ok(res.declared, by_seg[res.key], res.failed_pages, settings, prev_active[res.key])
+            entry = seg_registry.get(res.key) or {}
+            # cali sospetti nei run precedenti (una riesecuzione dello stesso giorno non conta due volte)
+            drop_runs[res.key] = (entry.get("drop_runs") or 0) - (1 if entry.get("drop_runs_date") == run_date else 0)
+            good, reason = segment_ok(
+                res.declared, by_seg[res.key], res.failed_pages, settings, prev_active[res.key], drop_runs[res.key]
+            )
             if settings.max_pages > 0:
                 good, reason = False, "max_pages"
             ok[res.key] = good
@@ -251,9 +303,18 @@ async def run_daily(
                 dstats["skipped_deadline"] += 1
                 continue
             if r.ok:
-                redirected = t.key[1] not in (r.final_url or "")
+                m = _LISTING_ID_IN_URL.search(httpx.URL(r.final_url or t.url).path)
+                redirected = m is None or m.group(1) != t.key[1]
                 if not redirected:
-                    details[t.key] = TROVACASA.parse_detail_page(r.text, t.key[1])
+                    try:
+                        details[t.key] = TROVACASA.parse_detail_page(r.text, t.key[1])
+                    except Exception as exc:
+                        dstats["errors"] += 1
+                        if is_check:
+                            checks[t.key] = "error"
+                        if len(error_samples) < 20:
+                            error_samples.append(dict(url=t.url, status=r.status, error=f"parse:{type(exc).__name__}"))
+                        continue
                     dstats["done"] += 1
                 else:
                     dstats["redirected"] += 1
@@ -278,6 +339,11 @@ async def run_daily(
 
         # 4. stato ed eventi
         new_state, events = reconcile(prev, cards, details, checks, scraped, ok, censor, run_date)
+        # Un annuncio "cambiato" il cui dettaglio non è arrivato tiene l'impronta vecchia,
+        # così domani risulta ancora cambiato e il dettaglio viene richiesto di nuovo.
+        for t in tasks:
+            if t.reason == "changed" and t.key not in details and t.key in new_state:
+                new_state[t.key] = new_state[t.key].model_copy(update=dict(last_fingerprint=prev[t.key].last_fingerprint))
 
         # 5. foto
         new_keys = {(e.source, e.listing_id) for e in events if e.type == "new"}
@@ -309,12 +375,20 @@ async def run_daily(
         await images.aclose()
 
     # 6. registro dei segmenti, allarmi
+    reasons = {(r["source"], r["city"], r["contract"]): r["reason"] for r in seg_report}
     for s in segments:
+        blank = dict(source=s[0], city=s[1], contract=s[2], first_complete_run=None, last_complete_run=None)
+        entry = blank | dict(seg_registry.get(s) or {})
         if ok[s]:
-            entry = dict(seg_registry.get(s) or dict(source=s[0], city=s[1], contract=s[2], first_complete_run=None))
             entry["first_complete_run"] = entry["first_complete_run"] or run_date
             entry["last_complete_run"] = run_date
-            seg_registry[s] = entry
+        if reasons.get(s) == "suspicious_drop":
+            entry["drop_runs"], entry["drop_runs_date"] = drop_runs.get(s, 0) + 1, run_date
+        else:
+            entry["drop_runs"], entry["drop_runs_date"] = 0, None
+        seg_registry[s] = entry
+    if "drop_confirmed" in reasons.values():
+        alerts.append("drop_confirmed")
     prev_n = sum(1 for s in prev.values() if s.status == "active" and s.segment in scraped)
     now_n = sum(1 for s in new_state.values() if s.status == "active" and s.segment in scraped)
     if active_drop_alert(prev_n, now_n, settings):
@@ -347,7 +421,10 @@ async def run_daily(
     if options.dry_run:
         return report
 
-    # 7. scrittura: partizioni del giorno → copia dello stato precedente → nuovo stato → report
+    # 7. scrittura: copia dello stato di partenza (segna che oggi c'è stato un run) → partizioni
+    #    del giorno → nuovo stato → registro segmenti → report
+    if not rerun:
+        write_parquet(storage, _history_key(run_date), frames.frame([s.model_dump() for s in current.values()], frames.STATE), version)
     datasets = {
         "observations": frames.frame(_observation_rows(cards, run_date), frames.OBSERVATIONS),
         "details": frames.frame(
@@ -362,8 +439,6 @@ async def run_daily(
         write_parquet(storage, key, _merge(storage, key, df, rerun, scraped), version)
     raw_key = partition_key("raw", run_date, "raw.parquet")
     write_parquet(storage, raw_key, _merge(storage, raw_key, frames.frame(raw_rows, frames.RAW), rerun, scraped), version)
-    if not rerun and current:
-        write_parquet(storage, _history_key(run_date), frames.frame([s.model_dump() for s in current.values()], frames.STATE), version)
     write_parquet(storage, STATE_KEY, frames.frame([s.model_dump() for s in new_state.values()], frames.STATE), version)
     write_parquet(storage, SEGMENTS_KEY, frames.frame(list(seg_registry.values()), frames.SEGMENTS), version)
     storage.write_bytes(_report_key(run_date), json.dumps(report, indent=2, ensure_ascii=False).encode("utf-8"))

@@ -45,7 +45,10 @@ RAW = {
     "final_url": S, "status": I, "html": S, "run_date": D,
 }  # fmt: skip
 
-SEGMENTS = {"source": S, "city": S, "contract": S, "first_complete_run": D, "last_complete_run": D}
+SEGMENTS = {
+    "source": S, "city": S, "contract": S, "first_complete_run": D, "last_complete_run": D,
+    "drop_runs": I, "drop_runs_date": D,
+}  # fmt: skip
 
 _PY = {str: S, int: I, float: F, bool: B}
 
@@ -76,5 +79,14 @@ STATE = _state_schema()
 
 
 def frame(rows: list[dict], schema: dict) -> pl.DataFrame:
-    """DataFrame con lo schema dato; le chiavi delle righe devono essere esattamente le colonne."""
-    return pl.DataFrame([{k: r.get(k) for k in schema} for r in rows], schema=schema)
+    """DataFrame con lo schema dato; le chiavi delle righe devono essere esattamente le colonne.
+
+    Una colonna in più o in meno è un errore di programmazione (campo aggiunto a un modello
+    senza aggiornare lo schema): meglio fermarsi che perdere dati in silenzio.
+    """
+    expected = set(schema)
+    for r in rows:
+        keys = set(r)
+        if keys != expected:
+            raise ValueError(f"colonne sconosciute: {sorted(keys - expected)}; colonne mancanti: {sorted(expected - keys)}")
+    return pl.DataFrame(rows, schema=schema, orient="row") if rows else pl.DataFrame(schema=schema)

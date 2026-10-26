@@ -92,6 +92,8 @@ def _parse_row(row: dict) -> tuple[dict, Card]:
 
 
 def import_legacy(csv_path: Path, storage: Storage, force: bool = False) -> int:
+    if storage.list_keys("runs/"):
+        raise RuntimeError("Ci sono già run giornalieri: importare lo storico ora sovrascriverebbe lo stato raccolto.")
     if storage.read_bytes(STATE_KEY) is not None and not force:
         raise RuntimeError("Lo stato esiste già: l'import dello storico va fatto prima del primo run (usa --force per forzare).")
     version = scraper_version()

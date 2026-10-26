@@ -89,14 +89,14 @@ Delle foto si calcola solo l'impronta percettiva; le immagini non si salvano. Or
 
 ## Il run giornaliero (`pipeline.run_daily`)
 
-1. **Stato di partenza.** Si legge `state/listings.parquet`. Se oggi esiste già un report (rerun), per i segmenti raccolti si riparte dalla copia dello stato *prima* del primo run di oggi (`state/history/dt=<oggi>/`).
-2. **Elenchi.** Tutti i segmenti in parallelo: pagina 1 (totale dichiarato), poi le pagine fino a `ceil(totale/24) + 1`. Un 404 oltre la prima pagina è la fine dell'elenco; altri errori dopo i tentativi contano come pagine fallite. Schede deduplicate per chiave.
+1. **Stato di partenza.** Una data precedente all'ultimo run viene rifiutata. Si legge `state/listings.parquet`. Se esiste già la copia `state/history/dt=<oggi>/` (rerun, anche dopo un run interrotto), per ogni annuncio che oggi riguarda un segmento raccolto si riparte dalla sua versione *prima* del primo run di oggi.
+2. **Elenchi.** Tutti i segmenti in parallelo: pagina 1 (totale dichiarato), poi le pagine fino a `ceil(totale/24) + 1`. Un 404 oltre la prima pagina è la fine dell'elenco; altri errori dopo i tentativi, o una pagina che il parser non riesce a leggere, contano come pagine fallite. Se il circuito si apre si tengono le schede già lette. Schede deduplicate per chiave.
 3. **Completezza** di ogni segmento (`quality.segment_ok`, vedi `logica-scomparse.md`).
 4. **Censura.** I segmenti con prima raccolta completa da meno di 7 giorni (o mai) marcano i nuovi annunci come `first_seen_censored`.
-5. **Dettagli** in ordine di priorità, a blocchi di 500, fino all'85% del tempo massimo. Esiti dei controlli di assenza: 200 → `alive` (se la pagina rimanda altrove: `alive` senza dettaglio), 404/410 → `gone`, altro → `error`.
+5. **Dettagli** in ordine di priorità, a blocchi di 500, fino all'85% del tempo massimo. Esiti dei controlli di assenza: 200 → `alive` (se la pagina rimanda altrove: `alive` senza dettaglio), 404/410 → `gone`, altro o pagina non leggibile → `error`. Un annuncio `changed` il cui dettaglio non arriva conserva l'impronta vecchia, così il giorno dopo il dettaglio viene richiesto di nuovo.
 6. **Stato ed eventi** (`state.reconcile`).
 7. **Foto** fino al 90% del tempo massimo, su un client separato (server immagini diverso).
-8. **Scrittura** (salvo `--dry-run`): partizioni del giorno → copia dello stato precedente → nuovo stato → registro segmenti → report; poi pulizia di `raw/` (90 giorni) e `state/history/` (30 giorni).
+8. **Scrittura** (salvo `--dry-run`): copia dello stato di partenza (segna che oggi c'è stato un run) → partizioni del giorno → nuovo stato → registro segmenti → report; poi pulizia di `raw/` (90 giorni) e `state/history/` (30 giorni).
 9. **Esito:** codice 1 se un segmento non è completo, calo degli attivi > 5% o circuito aperto sul sito.
 
-I log contengono solo conteggi: i log delle librerie HTTP (che stamperebbero gli URL) sono silenziati.
+I log contengono solo conteggi: i log delle librerie HTTP (che stamperebbero gli URL) sono silenziati, e un errore imprevisto stampa solo il suo tipo (il dettaglio va in `runs/crash/` sullo storage).

@@ -21,7 +21,7 @@ on:
         type: number
         default: 0
       max_runtime_minutes:
-        description: "Durata massima del run in minuti (340 per il primo avvio)"
+        description: "Durata massima del run in minuti (320 per il primo avvio)"
         type: number
         default: 100
       dry_run:

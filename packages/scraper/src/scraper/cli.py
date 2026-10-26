@@ -6,12 +6,13 @@ import json
 import logging
 import os
 import sys
+import traceback
 from datetime import date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from scraper.config import load_cities, load_settings
-from scraper.pipeline import RunOptions, run_daily
+from scraper.pipeline import RunOptions, RunRefused, run_daily
 from scraper.report import summary_markdown
 from scraper.storage import LocalStorage, R2Storage, Storage
 
@@ -113,7 +114,27 @@ def main(argv: list[str] | None = None) -> int:
     for name in ("httpx", "httpcore", "botocore", "boto3", "urllib3", "s3transfer"):
         logging.getLogger(name).setLevel(logging.WARNING)
     # Console Windows (cp1252): evita errori sui caratteri non ASCII del riepilogo.
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     args = build_parser().parse_args(argv)
-    return args.func(args)
+    try:
+        return args.func(args)
+    except RunRefused as exc:
+        print(f"Run rifiutato: {exc}", file=sys.stderr)  # il messaggio contiene solo date
+        return 2
+    except Exception as exc:
+        # Il testo dell'errore può contenere dati degli annunci (URL, titoli): nel log pubblico
+        # va solo il tipo; il dettaglio completo si salva nello storage, che è privato.
+        saved = _save_crash(args, traceback.format_exc())
+        print(f"Errore imprevisto: {type(exc).__name__}. Dettagli: {saved or 'non salvati'}", file=sys.stderr)
+        return 1
+
+
+def _save_crash(args, text: str) -> str | None:
+    try:
+        key = f"runs/crash/{datetime.now(ROME):%Y-%m-%dT%H%M%S}.txt"
+        _storage(args).write_bytes(key, text.encode("utf-8"))
+        return key
+    except Exception:
+        return None

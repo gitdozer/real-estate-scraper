@@ -24,7 +24,7 @@ In quest'ordine:
 
 1. **Import dello storico** da locale verso R2 (vedi "Importare lo storico" sotto), con le 4 variabili `R2_*` impostate nel terminale.
 2. **Prova da GitHub su due comuni piccoli**: Run workflow con `cities = gorla-minore,marnate`. Verificare nel riepilogo che i segmenti siano completi e che non ci siano errori. **Se compaiono 403 o `circuit_open`**, trovacasa blocca gli IP di GitHub: fermarsi e passare al piano B (in fondo).
-3. **Bootstrap completo**: Run workflow con `max_runtime_minutes = 340` e gli altri campi vuoti. Scarica i dettagli di tutti i ~38.000 annunci e le prime impronte delle foto (circa 1–2 ore). Le impronte mancanti vengono completate nei giorni successivi.
+3. **Bootstrap completo**: Run workflow con `max_runtime_minutes = 320` e gli altri campi vuoti (il job ha un limite di 350 minuti: il margine serve a installazione e scrittura). Scarica i dettagli di tutti i ~38.000 annunci e le prime impronte delle foto (circa 1–2 ore). Le impronte mancanti vengono completate nei giorni successivi.
 4. Controllare il riepilogo e `uv run python -m scraper status --storage r2`.
 5. Da qui in poi il cron gira da solo ogni notte. Annotare in `docs/fonti/trovacasa.md` durata, errori e minuti consumati dei primi run.
 
@@ -71,15 +71,17 @@ Stampa la data e l'esito dell'ultimo run; termina con codice 1 se è più vecchi
 
 ## Rieseguire un giorno
 
-Basta rilanciare `run` con la stessa `--date`. Il run riparte dallo stato **precedente** a quel giorno (copia in `state/history/dt=<data>/`) per i comuni raccolti, sovrascrive le partizioni del giorno per quei comuni e lascia intatte quelle degli altri comuni. Si può quindi rieseguire anche solo un comune (`--cities`).
+Si può rieseguire **solo l'ultimo giorno raccolto**: basta rilanciare `run` (con la stessa `--date`, se non è oggi). Il run riparte dallo stato **precedente** a quel giorno (copia in `state/history/dt=<data>/`, che è la prima cosa scritta da ogni run: vale anche se il run precedente si era interrotto a metà) per i comuni raccolti, sovrascrive le partizioni del giorno per quei comuni e lascia intatte quelle degli altri. Si può quindi rieseguire anche solo un comune (`--cities`).
+
+Una data **precedente all'ultimo run viene rifiutata** (codice di uscita 2): riporterebbe indietro lo stato. Un giorno saltato resta saltato; le date di scomparsa ne tengono conto (intervallo tra `list_last_seen` e `delisted_date`). `--dry-run` è sempre consentito.
 
 ## Ripristinare lo stato
 
 Se un run ha prodotto uno stato sbagliato (es. bug), lo stato prima di ogni run è conservato per 30 giorni in `state/history/dt=YYYY-MM-DD/listings.parquet`:
 
 1. copiare `state/history/dt=<giorno del run sbagliato>/listings.parquet` su `state/listings.parquet`;
-2. cancellare `runs/dt=<giorno>/report.json` (altrimenti il run successivo dello stesso giorno viene trattato come rerun) e le partizioni di quel giorno se vanno rifatte;
-3. rilanciare il run per quel giorno, se serve.
+2. per rifare quel giorno da zero: cancellare `state/history/dt=<giorno>/`, `runs/dt=<giorno>/` e le partizioni di quel giorno (`observations/`, `details/`, `photos/`, `events/`, `raw/` con `dt=<giorno>`);
+3. rilanciare il run per quel giorno (deve essere l'ultimo giorno raccolto).
 
 ## Aggiungere un comune
 
@@ -97,12 +99,17 @@ Aprire il run su GitHub Actions: il riepilogo mostra quale controllo è fallito.
 |---|---|---|
 | `segments_not_ok` con `failed_pages` | alcune pagine elenco non sono state scaricate nemmeno dopo i tentativi | di solito un problema temporaneo del sito: rieseguire il run (anche solo per quei comuni). Nessuna scomparsa è stata registrata per quei comuni |
 | `segments_not_ok` con `incomplete` | raccolti meno del 97% degli annunci dichiarati | controllare se il sito ha cambiato la paginazione; rieseguire |
-| `segments_not_ok` con `suspicious_drop` | gli annunci visti sono calati molto rispetto al giorno prima | possibile guasto o cambio del sito: verificare a mano il sito prima di tutto |
+| `segments_not_ok` con `suspicious_drop` | gli annunci visti sono calati molto rispetto al giorno prima | possibile guasto o cambio del sito: verificare a mano il sito. Se il calo è reale non serve fare nulla: dopo 3 run consecutivi viene accettato da solo |
+| `drop_confirmed` | un calo ripetuto per 3 run è stato accettato come reale e le scomparse sono state registrate | verificare che sul sito il numero di annunci sia davvero calato |
 | `segments_not_ok` con `no_declared_total` | la pagina 1 non riporta il totale | il sito ha probabilmente cambiato struttura: aggiornare il parser (`sources/trovacasa.py`) e le fixture |
 | `active_drop` | gli annunci attivi sono calati più del 5% | verificare sul sito se è un calo reale |
 | `circuit_open` | troppi errori anche a concorrenza 1: il sito è in difficoltà o ci blocca | se si ripete per giorni (403 persistenti), passare al **piano B** (sotto) |
 
 Il report completo, con campioni degli errori, è su R2 in `runs/dt=YYYY-MM-DD/report.json`.
+
+**Errore imprevisto** ("Errore imprevisto: <tipo>" nel log): nel log pubblico compare solo il tipo di errore, perché il testo potrebbe contenere dati degli annunci. Il dettaglio completo (traceback) è su R2 in `runs/crash/<data-ora>.txt`. I dati raccolti fino a quel punto non vengono scritti: rieseguire il run dopo aver capito la causa.
+
+**Run rifiutato** (codice 2): data precedente all'ultimo run, vedi "Rieseguire un giorno".
 
 ## Piano B: se GitHub Actions viene bloccato
 

@@ -67,7 +67,7 @@ Codice: `quality.py`. Un segmento (fonte, comune, contratto) è **completo** sol
 1. la pagina 1 riporta il totale dichiarato dal sito (altrimenti motivo `no_declared_total`);
 2. nessuna pagina elenco è fallita dopo tutti i tentativi (`failed_pages`);
 3. gli annunci unici raccolti sono almeno il **97%** del totale dichiarato; per i segmenti con meno di **50** annunci dichiarati si ammettono al massimo **2** mancanti (`incomplete`).
-4. gli annunci raccolti non sono calati in modo sospetto rispetto agli annunci attivi del segmento prima del run: il calo ammesso è il 5% (minimo 2 annunci) (`suspicious_drop`). Protegge dal caso in cui il sito dichiari per errore un totale sbagliato (es. "0 case"): il totale e gli annunci arrivano dalla stessa pagina, quindi da soli non bastano.
+4. gli annunci raccolti non sono calati in modo sospetto rispetto agli annunci attivi del segmento prima del run: il calo ammesso è il 5% (minimo 2 annunci) (`suspicious_drop`). Protegge dal caso in cui il sito dichiari per errore un totale sbagliato (es. "0 case"): il totale e gli annunci arrivano dalla stessa pagina, quindi da soli non bastano. **Se il calo si ripete per 3 run consecutivi** (`drop_confirm_runs`) lo si considera reale (`drop_confirmed`, con avviso) e le scomparse vengono registrate: altrimenti un calo vero (frequente nei segmenti piccoli, es. 4 affitti a Marnate) bloccherebbe il segmento per sempre. Le riesecuzioni dello stesso giorno contano come un solo run.
 5. il run non è limitato con `--max-pages` (`max_pages`).
 
 Un segmento incompleto **non genera scomparse** quel giorno e fa terminare il run con errore (email di GitHub). Per questo un run di prova con `--max-pages` non può mai registrare scomparse.

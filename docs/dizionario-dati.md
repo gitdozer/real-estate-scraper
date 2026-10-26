@@ -22,7 +22,8 @@ Tutti i dati vivono su Cloudflare R2 in file Parquet (compressione zstd), partiz
 | `events/dt=YYYY-MM-DD/part-0.parquet` | eventi del giorno (nuovo, prezzo, scomparso, …) | ogni run |
 | `raw/dt=YYYY-MM-DD/raw.parquet` | HTML compresso dei dettagli nuovi/cambiati e dei primi controlli di scomparsa, per poter ri-analizzare le pagine | ogni run; conservato **90 giorni** |
 | `state/listings.parquet` | stato corrente: una riga per annuncio | sovrascritto a fine run |
-| `state/history/dt=YYYY-MM-DD/listings.parquet` | copia dello stato **prima** del run di quel giorno, per ripristino e per i rerun | primo run del giorno; conservata **30 giorni** |
+| `state/history/dt=YYYY-MM-DD/listings.parquet` | copia dello stato **prima** del run di quel giorno, per ripristino e per i rerun. È la prima cosa scritta: se esiste, quel giorno c'è già stato un run | primo run del giorno; conservata **30 giorni** |
+| `runs/crash/<data-ora>.txt` | dettaglio di un errore imprevisto (traceback), che non va nei log pubblici | solo in caso di errore |
 | `state/segments.parquet` | registro dei segmenti: prima e ultima raccolta completa | ogni run |
 | `runs/dt=YYYY-MM-DD/report.json` | report del run: richieste, errori, completezza, eventi, esito | ogni run |
 | `legacy/` | storico importato una tantum (CSV originale + Parquet) | una volta |
@@ -173,6 +174,8 @@ Percorso: `state/segments.parquet`. Una riga per (fonte, comune, contratto).
 | `source`, `city`, `contract` | str | segmento |
 | `first_complete_run` | date? | primo giorno con raccolta completa. Gli annunci nuovi nei 7 giorni successivi sono marcati `first_seen_censored` (probabilmente già online prima) |
 | `last_complete_run` | date? | ultimo giorno con raccolta completa |
+| `drop_runs` | int | run consecutivi con calo sospetto (`suspicious_drop`); al terzo il calo è accettato |
+| `drop_runs_date` | date? | giorno dell'ultimo calo sospetto contato (una riesecuzione dello stesso giorno non lo conta due volte) |
 
 ## raw — HTML grezzo (90 giorni)
 

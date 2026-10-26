@@ -26,7 +26,7 @@ Ricognizione del 2026-10-25. Codice: `packages/scraper/src/scraper/sources/trova
 | Quartiere | `span.card__quartiere` | spesso vuoto |
 | Superficie, locali | `span.card__info` ("75 m²", "2 locali" / "1 locale") | possono mancare |
 | Prezzo | `span.card__price` | "450.000 €"; oppure "Prezzo su richiesta" (classe `noprice`) |
-| Caratteristiche | `p.annuncioTag` | es. "Ascensore", "Da Privato", "Nuova Costruzione" |
+| Caratteristiche | `p.annuncioTag` | es. "Ascensore", "Da Privato", "Nuova Costruzione". **Al massimo 6**: è un estratto dell'elenco completo del dettaglio |
 | Foto | `[data-src-list]`, ID separati da `\|` | vuoto se l'annuncio non ha foto |
 
 **Tipologia dal titolo:** il testo prima di "da privato", "all'asta" o " a <comune>". Non basta il primo " a ": "Villa a Schiera a Milano" → "Villa a Schiera".
@@ -82,3 +82,4 @@ Velocità (da rete domestica, pagine elenco di Milano): 1 connessione → 2,5 ri
 | Data | Dove | Perimetro | Risultato |
 |---|---|---|---|
 | 2026-10-25 | PC locale | Gorla Minore + Marnate, vendita e affitto | 147 annunci, 4 segmenti completi, 105 dettagli, 311 impronte foto, ~20 s, 0 errori. Aste: 39 su 140 in vendita (28%) |
+| 2026-10-26 | PC locale | idem, giorno successivo | 4 annunci rimossi (404 reali, HTML in `raw/`), 2 nuovi, 70 richieste. Il sito ha tolto la caratteristica "Non Arredato/Vuoto" da tutti gli annunci: 38 eventi `detail_changed` e 51 schede con impronta cambiata (la scheda mostra al massimo **6 caratteristiche**: se una sparisce ne compare un'altra) |
