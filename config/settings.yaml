@@ -20,6 +20,7 @@ completeness_min: 0.97       # quota minima di annunci raccolti rispetto al tota
 small_segment_threshold: 50  # sotto questo totale dichiarato si usa una soglia assoluta...
 small_segment_max_missing: 2 # ...cioè al massimo questi annunci mancanti
 active_drop_alert: 0.05      # allarme se gli annunci attivi calano più di questa quota rispetto al run precedente
+drop_confirm_runs: 3         # un calo sospetto di un segmento si accetta come reale dopo questi run consecutivi
 delisted_recheck_days: 7     # ogni quanti giorni ricontrollare il dettaglio di un annuncio "delisted"
 
 # --- Conservazione ---

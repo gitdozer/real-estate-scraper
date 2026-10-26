@@ -36,6 +36,15 @@ def test_settings_file_matches_defaults():
     assert s.completeness_min == 0.97 and s.photos_new == 6 and s.photos_backlog == 3
 
 
+def test_settings_file_lists_every_parameter():
+    import yaml
+
+    from scraper.config import Settings
+
+    in_file = set(yaml.safe_load((REPO / "config/settings.yaml").read_text(encoding="utf-8")))
+    assert in_file == set(Settings.model_fields)
+
+
 def test_settings_ignores_none_overrides():
     s = load_settings(REPO / "config/settings.yaml", {"max_pages": None})
     assert s.max_pages == 0
