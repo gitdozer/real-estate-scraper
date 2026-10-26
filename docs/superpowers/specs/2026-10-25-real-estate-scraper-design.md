@@ -54,7 +54,7 @@ Progetto personale, nel tempo libero, solo strumenti gratuiti.
 | Dati storici | Unico storico disponibile: snapshot Milano vendita del 2026-10-17 dal vecchio scraper (17.304 annunci), da importare (vedi §6.5) |
 | Foto | Non si salvano; si salvano impronte percettive (pHash) di più foto per annuncio |
 | Fonte iniziale | trovacasa.it. casa.it escluso (DataDome). Siti di agenzie in fase 4 |
-| Vecchio scraper | `DennisUnimib/TestGitHubActionsScraper`: solo punto di partenza, non da copiare |
+| Vecchio scraper | repository personale precedente (scraper di prova su GitHub Actions): solo punto di partenza, non da copiare |
 
 ## 4. Cosa sappiamo della fonte (ricognizione del 2026-10-25)
 
