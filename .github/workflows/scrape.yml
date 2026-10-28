@@ -45,7 +45,7 @@ jobs:
   scrape:
     runs-on: ubuntu-latest
     # Rete di sicurezza: la scadenza vera è gestita dallo scraper. Il run pianificato non ha input → 120.
-    timeout-minutes: ${{ inputs.job_timeout_minutes || 120 }}
+    timeout-minutes: ${{ fromJSON(format('{0}', inputs.job_timeout_minutes || 120)) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e  # v10.3.2

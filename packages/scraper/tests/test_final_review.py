@@ -36,6 +36,8 @@ def test_scrape_job_timeout_is_an_input_with_daily_default():
     assert triggers["workflow_dispatch"]["inputs"]["job_timeout_minutes"]["default"] == 120
     assert "inputs.job_timeout_minutes" in str(wf["jobs"]["scrape"]["timeout-minutes"])
     assert "120" in str(wf["jobs"]["scrape"]["timeout-minutes"])  # valore per il run pianificato
+    # GitHub passa gli input come testo ('60'): timeout-minutes vuole un numero → conversione esplicita
+    assert "fromJSON(format(" in str(wf["jobs"]["scrape"]["timeout-minutes"])
 
 
 def test_workflows_use_locked_dependencies():
