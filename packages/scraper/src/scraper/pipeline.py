@@ -136,6 +136,7 @@ async def _for_each_chunk(
     binary: bool,
     deadline: float | None,
     handle: Callable[[Any, FetchResult | None], None],
+    progress: Callable[[int, int], None] | None = None,
 ) -> bool:
     """Scarica a blocchi di CHUNK richieste ed elabora ogni blocco SUBITO, prima di scaricare
     il successivo: in memoria resta un solo blocco di pagine o immagini alla volta (al bootstrap
@@ -152,6 +153,8 @@ async def _for_each_chunk(
             return True
         for x, r in zip(chunk, results):
             handle(x, r)
+        if progress is not None:
+            progress(min(i + CHUNK, len(items)), len(items))
     return False
 
 
@@ -261,6 +264,14 @@ async def run_daily(
     prev = _starting_state(current, _read_state(storage, _history_key(run_date)), scraped) if rerun else current
     seg_registry = load_segments(storage)
 
+    def minutes() -> float:
+        return (clock() - t0) / 60
+
+    def progress_of(phase: str) -> Callable[[int, int], None]:
+        return lambda done, total: log.info("[%s] %d/%d (%.1f min)", phase, done, total, minutes())
+
+    log.info("[avvio] %d segmenti, %d annunci nello stato, rerun=%s", len(segments), len(current), rerun)
+
     site = Fetcher(settings.site_concurrency, settings, transport=transport, clock=clock)
     images = Fetcher(settings.image_concurrency, settings, transport=transport, clock=clock)
     circuit = False
@@ -275,6 +286,8 @@ async def run_daily(
         for res in seg_results:
             for c in res.cards:
                 cards.setdefault(c.key, c)  # stesso annuncio visto due volte: vale la prima
+
+        log.info("[elenchi] %d schede uniche da %d segmenti (%.1f min)", len(cards), len(seg_results), minutes())
 
         # 2. completezza dei segmenti
         prev_active = Counter(s.segment for s in prev.values() if s.status == "active")
@@ -366,7 +379,8 @@ async def run_daily(
                 if len(error_samples) < 20:
                     error_samples.append(dict(url=t.url, status=r.status, error=r.error))
 
-        if await _for_each_chunk(site, tasks, lambda t: t.url, False, detail_deadline, handle_detail):
+        log.info("[dettagli] pianificati %d (%.1f min)", len(tasks), minutes())
+        if await _for_each_chunk(site, tasks, lambda t: t.url, False, detail_deadline, handle_detail, progress_of("dettagli")):
             circuit = True
             alerts.append("circuit_open_details")
         attempted = len(tasks) - dstats["skipped_deadline"]
@@ -403,7 +417,10 @@ async def run_daily(
             photo_rows.append(dict(source=p.key[0], listing_id=p.key[1], city=c.city, contract=c.contract, photo_index=p.index,
                                    photo_id=p.photo_id, phash=hashes[0], dhash=hashes[1], run_date=run_date))  # fmt: skip
 
-        if await _for_each_chunk(images, ptasks, lambda p: TROVACASA.photo_url(p.photo_id), True, photo_deadline, handle_photo):
+        log.info("[foto] pianificate %d (%.1f min)", len(ptasks), minutes())
+        if await _for_each_chunk(
+            images, ptasks, lambda p: TROVACASA.photo_url(p.photo_id), True, photo_deadline, handle_photo, progress_of("foto")
+        ):
             alerts.append("circuit_open_photos")
         for key, n in hashed.items():
             new_state[key] = new_state[key].model_copy(update=dict(photos_done=n, photo_ids_hash=photo_ids_hash(cards[key].photo_ids)))
@@ -458,6 +475,7 @@ async def run_daily(
     if options.dry_run:
         return report
 
+    log.info("[scrittura] inizio (%.1f min)", minutes())
     # 7. scrittura: copia dello stato di partenza (segna che oggi c'è stato un run) → partizioni
     #    del giorno → nuovo stato → registro segmenti → report
     if not rerun:
@@ -481,4 +499,5 @@ async def run_daily(
     storage.write_bytes(_report_key(run_date), json.dumps(report, indent=2, ensure_ascii=False).encode("utf-8"))
     prune_partitions(storage, "raw", settings.raw_retention_days, run_date)
     prune_partitions(storage, "state/history", settings.state_history_days, run_date)
+    log.info("[scrittura] completata (%.1f min)", minutes())
     return report

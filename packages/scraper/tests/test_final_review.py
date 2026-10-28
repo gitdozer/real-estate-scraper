@@ -28,6 +28,16 @@ def test_workflow_actions_are_pinned_to_commit_sha():
             assert re.fullmatch(r"[\w.-]+/[\w.-]+@[0-9a-f]{40}", ref), f"{wf.name}: {ref}"
 
 
+def test_scrape_job_timeout_is_an_input_with_daily_default():
+    import yaml
+
+    wf = yaml.safe_load((REPO / ".github" / "workflows" / "scrape.yml").read_text(encoding="utf-8"))
+    triggers = wf.get("on") or wf.get(True)  # PyYAML legge la chiave "on" come True
+    assert triggers["workflow_dispatch"]["inputs"]["job_timeout_minutes"]["default"] == 120
+    assert "inputs.job_timeout_minutes" in str(wf["jobs"]["scrape"]["timeout-minutes"])
+    assert "120" in str(wf["jobs"]["scrape"]["timeout-minutes"])  # valore per il run pianificato
+
+
 def test_workflows_use_locked_dependencies():
     for wf in (REPO / ".github" / "workflows").glob("*.yml"):
         text = wf.read_text(encoding="utf-8")
