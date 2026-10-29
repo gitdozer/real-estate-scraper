@@ -116,7 +116,7 @@ async def test_circuit_open_in_list_phase_no_disappearances(site, storage):
     await run(site, storage, D1)
     site.listings[("milano", "vendita")].remove("5")
     site.failing_pages.update(("milano", "vendita", p) for p in (2, 3))
-    report = await run(site, storage, D2, settings=Settings(max_retries=1, error_window=1, site_concurrency=1))
+    report = await run(site, storage, D2, settings=Settings(max_retries=1, error_window=1, site_concurrency=1, site_rate_per_s=0))
     assert report["exit_code"] == 1 and "circuit_open_lists" in report["alerts"]
     assert all(s.status == "active" for s in st(storage).values())
     # la pagina 1 era stata letta: le sue 24 osservazioni non vanno perse

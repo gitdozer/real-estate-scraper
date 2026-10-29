@@ -17,5 +17,6 @@ Approfondimenti:
   - [0003 — GitHub Actions + Cloudflare R2](decisioni/0003-github-actions-r2.md)
   - [0004 — monorepo](decisioni/0004-monorepo.md)
   - [0005 — sparito = venduto, con date separate](decisioni/0005-sparito-uguale-venduto.md)
+  - [0006 — ritmo limitato verso il sito](decisioni/0006-ritmo-limitato.md)
 - [superpowers/specs/](superpowers/specs) — documento di progetto approvato.
 - [superpowers/plans/](superpowers/plans) — piani di implementazione.

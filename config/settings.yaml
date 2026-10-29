@@ -4,6 +4,8 @@
 # --- Rete ---
 site_concurrency: 6          # richieste contemporanee verso il sito degli annunci
 image_concurrency: 8         # richieste contemporanee verso il server delle foto
+site_rate_per_s: 3.0         # ritmo massimo verso il sito (richieste/s). Da GitHub il sito tollera ~3/s; a ~12/s rallenta tutto (diagnosi 2026-10-29). 0 = nessun limite
+image_rate_per_s: 4.0        # ritmo massimo verso il server delle foto (richieste/s)
 max_retries: 4               # tentativi massimi per richiesta (errori di rete, 5xx, 429)
 timeout_s: 30.0              # timeout di una singola richiesta, in secondi
 error_window: 200            # richieste considerate per misurare il tasso di errori

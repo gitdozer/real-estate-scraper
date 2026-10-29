@@ -5,6 +5,7 @@ import httpx
 import pytest
 from fakesite import FakeSite
 
+from scraper import __version__
 from scraper.config import City, Settings
 from scraper.pipeline import RunOptions, load_state, run_daily
 from scraper.storage import LocalStorage, partition_key, read_parquet
@@ -31,7 +32,10 @@ def storage(tmp_path):
 
 
 async def run(site, storage, day, cities=(MILANO,), settings=SET, only=None, dry=False, clock=None):
-    kwargs = {} if clock is None else {"clock": clock}
+    async def instant(_seconds):  # il ritmo limitato non deve rallentare i test
+        return None
+
+    kwargs = {"sleep": instant} if clock is None else {"clock": clock, "sleep": instant}
     return await run_daily(
         storage,
         list(cities),
@@ -120,9 +124,12 @@ async def test_pipeline_respects_deadline(site, storage):
 
     report = await run(site, storage, D1, clock=clock)
     state = st(storage)
-    assert len(state) == 30 and all(s.last_detail_date is None for s in state.values())
-    assert read_parquet(storage, partition_key("observations", D1)) is not None
-    assert report["details"]["skipped_deadline"] == 30
+    # Tempo già scaduto: si legge solo la pagina 1 di ogni segmento (24 annunci), nessun dettaglio,
+    # ma il run si chiude e scrive quanto raccolto; il segmento risulta incompleto.
+    assert len(state) == 24 and all(s.last_detail_date is None for s in state.values())
+    assert len(read_parquet(storage, partition_key("observations", D1))) == 24
+    assert report["details"]["skipped_deadline"] == 24
+    assert report["segments"][0]["reason"] == "failed_pages"
 
 
 async def test_pipeline_rerun_same_day_is_idempotent(site, storage):
@@ -154,7 +161,7 @@ async def test_pipeline_writes_versioned_partitions_and_report(site, storage):
     for ds in ("observations", "details", "photos", "events"):
         df = read_parquet(storage, partition_key(ds, D1))
         assert df["schema_version"].unique().to_list() == [1], ds
-        assert df["scraper_version"].str.starts_with("0.1.0+").all(), ds
+        assert df["scraper_version"].str.starts_with(f"{__version__}+").all(), ds
     report = json.loads(storage.read_bytes(f"runs/dt={D1}/report.json"))
     assert report["run_date"] == str(D1) and report["segments"][0]["declared"] == 30
     assert storage.read_bytes("state/listings.parquet") and storage.read_bytes("state/segments.parquet")

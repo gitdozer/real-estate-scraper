@@ -48,6 +48,8 @@ Client: `http.Fetcher` (httpx asincrono), header da browser reale, compressione 
 |---|---|---|
 | `site_concurrency` | 6 | richieste contemporanee verso trovacasa.it |
 | `image_concurrency` | 8 | richieste contemporanee verso il server delle foto (host diverso) |
+| `site_rate_per_s` | 3 | **ritmo massimo** verso il sito (richieste/s): tra l'inizio di due richieste passano almeno 1/3 s. Da GitHub il sito tollera ~3/s, a ~12/s lascia appese le richieste — vedi [decisioni/0006](decisioni/0006-ritmo-limitato.md) |
+| `image_rate_per_s` | 4 | ritmo massimo verso il server delle foto |
 | `max_retries` | 4 | tentativi massimi per richiesta |
 | `timeout_s` | 30 | timeout della singola richiesta |
 | `error_window` | 200 | richieste su cui si misura il tasso di errori |
@@ -57,7 +59,7 @@ Client: `http.Fetcher` (httpx asincrono), header da browser reale, compressione 
 
 **Cosa non si ritenta:** 404 e gli altri 4xx. Un 404 non è un errore: è l'informazione "annuncio rimosso", e non conta nel tasso di errori. Fanno eccezione **401, 403 e 451** (accesso negato): non si ritentano ma contano come fallimenti, quindi azionano il freno e il circuito — se la fonte ci blocca, il run si ferma. `Retry-After` è rispettato fino a un massimo di 30 secondi.
 
-**Freno adattivo:** quando la finestra delle ultime `error_window` richieste è piena e i fallimenti definitivi (dopo tutti i tentativi) superano `error_threshold`, la concorrenza si dimezza (6 → 3 → 1). Se succede di nuovo con concorrenza 1, il client solleva `CircuitOpen`: il run si ferma in modo pulito, scrive quanto raccolto e **non registra scomparse**.
+**Freno adattivo:** ogni **tentativo** fallito (timeout, 5xx, 429, redirect di errore) conta nel tasso di errori, anche se il tentativo successivo riesce: un sito che rallenta va assecondato subito. Quando la finestra delle ultime `error_window` richieste è piena e i fallimenti superano `error_threshold`, concorrenza e ritmo si dimezzano (ritmo minimo 0,25 richieste/s). Quando sono già al minimo, il client solleva `CircuitOpen`: il run si ferma in modo pulito, scrive quanto raccolto e **non registra scomparse**.
 
 **Scadenza:** `get_many(..., deadline=…)` non avvia nuove richieste dopo la scadenza; quelle non eseguite restano in coda per il giorno dopo.
 
@@ -90,7 +92,7 @@ Delle foto si calcola solo l'impronta percettiva; le immagini non si salvano. Or
 ## Il run giornaliero (`pipeline.run_daily`)
 
 1. **Stato di partenza.** Una data precedente all'ultimo run viene rifiutata. Si legge `state/listings.parquet`. Se esiste già la copia `state/history/dt=<oggi>/` (rerun, anche dopo un run interrotto), per ogni annuncio che oggi riguarda un segmento raccolto si riparte dalla sua versione *prima* del primo run di oggi.
-2. **Elenchi.** Tutti i segmenti in parallelo: pagina 1 (totale dichiarato), poi le pagine fino a `ceil(totale/24) + 1`. Un 404 oltre la prima pagina è la fine dell'elenco; altri errori dopo i tentativi, o una pagina che il parser non riesce a leggere, contano come pagine fallite. Se il circuito si apre si tengono le schede già lette. Schede deduplicate per chiave.
+2. **Elenchi.** Fino al 40% del tempo massimo (`LIST_SHARE`); le pagine non lette entro la scadenza contano come fallite. Ogni minuto un **battito** nel log riporta richieste, richieste in volo, latenze e codici HTTP. Tutti i segmenti in parallelo: pagina 1 (totale dichiarato), poi le pagine fino a `ceil(totale/24) + 1`. Un 404 oltre la prima pagina è la fine dell'elenco; altri errori dopo i tentativi, o una pagina che il parser non riesce a leggere, contano come pagine fallite. Se il circuito si apre si tengono le schede già lette. Schede deduplicate per chiave.
 3. **Completezza** di ogni segmento (`quality.segment_ok`, vedi `logica-scomparse.md`).
 4. **Censura.** I segmenti con prima raccolta completa da meno di 7 giorni (o mai) marcano i nuovi annunci come `first_seen_censored`.
 5. **Dettagli** in ordine di priorità, a blocchi di 500, fino all'85% del tempo massimo. Ogni blocco viene elaborato **prima** di scaricare il successivo, così in memoria resta un solo blocco di pagine (al bootstrap i dettagli sono ~35.000: misurato ~145 MB di picco con 6.000 pagine simulate da 170 KB). L'HTML conservato in `raw/` viene compresso subito ed è limitato a `raw_max_per_run` pagine. Una pagina di dettaglio senza il codice `TC<id>` dell'annuncio (errore, verifica anti-bot, sito ridisegnato) conta come errore; se gli errori superano 20 e il 10% dei dettagli tentati scatta l'avviso `details_errors`. Esiti dei controlli di assenza: 200 → `alive` (se la pagina rimanda altrove: `alive` senza dettaglio), 404/410 → `gone`, altro o pagina non leggibile → `error`. Un annuncio `changed` il cui dettaglio non arriva conserva l'impronta vecchia, così il giorno dopo il dettaglio viene richiesto di nuovo.

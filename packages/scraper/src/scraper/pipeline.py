@@ -46,6 +46,7 @@ STATE_KEY = "state/listings.parquet"
 SEGMENTS_KEY = "state/segments.parquet"
 CENSOR_WINDOW_DAYS = 7  # annunci "nuovi" nei primi giorni di un segmento: probabilmente già online prima
 RAW_GONE_SAMPLES = 50  # pagine di controlli 404/redirect conservate per capire come il sito mostra un annuncio rimosso
+LIST_SHARE = 0.40  # quota del tempo massimo per gli elenchi: oltre, le pagine non lette contano come fallite
 CHUNK = 500  # richieste per blocco: un'interruzione (scadenza, circuito) non fa perdere i blocchi già fatti
 _CHECK_REASONS = ("absence_check", "delisted_recheck")
 _RAW_REASONS = ("new", "changed", "never_detailed")
@@ -170,7 +171,7 @@ async def _heartbeat(fetcher: Fetcher, phase: str, minutes: Callable[[], float],
         )  # fmt: skip
 
 
-async def _scrape_segment(fetcher: Fetcher, seg: SegmentKey, settings: Settings) -> SegmentResult:
+async def _scrape_segment(fetcher: Fetcher, seg: SegmentKey, settings: Settings, deadline: float | None = None) -> SegmentResult:
     _, slug, contract = seg
     try:
         first = await fetcher.get(TROVACASA.list_url(slug, contract, 1))
@@ -192,11 +193,14 @@ async def _scrape_segment(fetcher: Fetcher, seg: SegmentKey, settings: Settings)
     pages = list(range(2, last + 1))
     cards, failed = list(page1.cards), 0
     try:
-        results = await fetcher.get_many([TROVACASA.list_url(slug, contract, p) for p in pages])
+        results = await fetcher.get_many([TROVACASA.list_url(slug, contract, p) for p in pages], deadline=deadline)
     except CircuitOpen:
         # si tengono le schede della pagina 1; il segmento risulta incompleto
         return SegmentResult(seg, cards, declared, len(pages) + 1, max(1, len(pages)), circuit=True, skipped_cards=skipped)
     for p, r in zip(pages, results):
+        if r is None:
+            failed += 1  # non letta: tempo per gli elenchi scaduto
+            continue
         if r.ok:
             try:
                 page = TROVACASA.parse_list_page(r.text, slug, contract, p)
@@ -254,6 +258,7 @@ async def run_daily(
     options: RunOptions,
     transport: httpx.AsyncBaseTransport | None = None,
     clock=time.monotonic,
+    sleep=asyncio.sleep,
 ) -> dict:
     run_date = options.run_date
     t0 = clock()
@@ -284,14 +289,15 @@ async def run_daily(
 
     log.info("[avvio] %d segmenti, %d annunci nello stato, rerun=%s", len(segments), len(current), rerun)
 
-    site = Fetcher(settings.site_concurrency, settings, transport=transport, clock=clock)
-    images = Fetcher(settings.image_concurrency, settings, transport=transport, clock=clock)
+    site = Fetcher(settings.site_concurrency, settings, rate_per_s=settings.site_rate_per_s, transport=transport, clock=clock, sleep=sleep)
+    images = Fetcher(settings.image_concurrency, settings, rate_per_s=settings.image_rate_per_s, transport=transport, clock=clock, sleep=sleep)
     circuit = False
     try:
         # 1. elenchi
         beat = asyncio.create_task(_heartbeat(site, "elenchi", minutes))
         try:
-            seg_results = list(await asyncio.gather(*(_scrape_segment(site, s, settings) for s in segments)))
+            list_deadline = t0 + LIST_SHARE * settings.max_runtime_minutes * 60
+            seg_results = list(await asyncio.gather(*(_scrape_segment(site, s, settings, list_deadline) for s in segments)))
         finally:
             beat.cancel()
         if any(r.circuit for r in seg_results):

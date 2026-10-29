@@ -4,6 +4,12 @@ Modifiche per componente. Versioni [SemVer](https://semver.org/lang/it/), tag `<
 
 ## scraper
 
+### 0.1.1 — 2026-10-29
+- Ritmo limitato verso il sito (3 richieste/s) e le foto (4/s): da GitHub il sito lascia appese le richieste oltre ~3/s (diagnosi in `docs/decisioni/0006`).
+- Il freno conta ogni tentativo fallito e dimezza anche il ritmo; scadenza anche per la fase elenchi.
+- Log di avanzamento per fase, battito ogni minuto, latenze nelle statistiche; limite del job impostabile (default 120).
+- Comando `probe` e workflow "Diagnosi ritmo".
+
 ### 0.1.0 — 2026-10-25
 - Raccolta giornaliera da trovacasa.it: elenchi, dettagli, impronte foto, stato ed eventi, controlli di qualità, CLI `run`/`status`/`import-legacy`; import dello storico Milano del 2026-10-17.
 - Robustezza (revisione indipendente): riesecuzione corretta anche dopo un run interrotto, rifiuto delle date passate, errori di lettura gestiti pagina per pagina, calo di un segmento accettato dopo 3 run, errori imprevisti senza dati nei log pubblici.

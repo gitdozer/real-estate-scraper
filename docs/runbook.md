@@ -114,6 +114,10 @@ Il report completo, con campioni degli errori, è su R2 in `runs/dt=YYYY-MM-DD/r
 
 **"Configurazione: Variabili d'ambiente mancanti per R2: …"**: uno o più secrets non sono impostati o hanno un nome diverso; controllare Settings → Secrets and variables → Actions.
 
+## Diagnosi del ritmo accettato dal sito
+
+Se il battito nei log della raccolta mostra molti `ReadTimeout` (richieste appese) il sito ci sta rallentando: il ritmo `site_rate_per_s` è troppo alto per l'IP di GitHub. Per misurare il ritmo sostenibile: **Actions → Diagnosi ritmo → Run workflow**, con le fasi `richieste_al_secondo:minuti` (default `1:10,2:5,4:5`). Non usa credenziali e non scrive dati; il riepilogo riporta per ogni fase richieste, risposte, timeout e latenza. In locale: `uv run python -m scraper probe --phases "1:2,2:2"`.
+
 ## Piano B: se GitHub Actions viene bloccato
 
 Lo stesso comando gira su qualsiasi macchina: creare una VM gratuita Google Cloud e2-micro (1 GB di RAM: il run elabora i dettagli a blocchi di 500 e resta nell'ordine delle centinaia di MB), installare `uv`, clonare il repository, impostare le 4 variabili `R2_*` e pianificare con cron `uv run python -m scraper run --storage r2` ogni notte. Lo storage su R2 resta lo stesso. Vedi [decisioni/0003](decisioni/0003-github-actions-r2.md).
