@@ -69,6 +69,9 @@ class Fetcher:
         self._settings = settings
         self._limit = max(1, concurrency)
         self._active = 0
+        self._latency_total = 0.0
+        self._latency_max = 0.0
+        self._latency_n = 0
         self._cond = asyncio.Condition()
         self._window: deque[bool] = deque(maxlen=settings.error_window)
         self._circuit_open = False
@@ -91,7 +94,16 @@ class Fetcher:
             "failures": self._counts["failures"],
             "by_status": dict(self._by_status),
             "concurrency_now": self._limit,
+            "in_flight": self._active,
+            "latency_avg_s": round(self._latency_total / self._latency_n, 2) if self._latency_n else 0.0,
+            "latency_max_s": round(self._latency_max, 2),
         }
+
+    def _note_latency(self, started: float) -> None:
+        elapsed = self._clock() - started
+        self._latency_total += elapsed
+        self._latency_n += 1
+        self._latency_max = max(self._latency_max, elapsed)
 
     async def aclose(self) -> None:
         await self._client.aclose()
@@ -139,12 +151,15 @@ class Fetcher:
                     return None
                 attempts = attempt
                 self._counts["requests"] += 1
+                started = self._clock()
                 try:
                     resp = await self._client.get(url)
                 except httpx.HTTPError as exc:
+                    self._note_latency(started)
                     status, final_url, error = None, None, type(exc).__name__
                     self._by_status[error] += 1
                 else:
+                    self._note_latency(started)
                     status, final_url = resp.status_code, str(resp.url)
                     self._by_status[str(status)] += 1
                     if resp.url.path.startswith("/Error/"):

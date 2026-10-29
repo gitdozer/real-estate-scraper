@@ -158,6 +158,18 @@ async def _for_each_chunk(
     return False
 
 
+async def _heartbeat(fetcher: Fetcher, phase: str, minutes: Callable[[], float], every_s: float = 60.0) -> None:
+    """Battito periodico durante una fase lunga: se il run si blocca, il log dice dove e come.
+    Solo conteggi e latenze, nessun dato degli annunci."""
+    while True:
+        await asyncio.sleep(every_s)
+        s = fetcher.stats
+        log.info(
+            "[%s] in corso: %d richieste, %d in volo, latenza media %.1f s, max %.1f s, codici %s (%.1f min)",
+            phase, s["requests"], s["in_flight"], s["latency_avg_s"], s["latency_max_s"], s["by_status"], minutes(),
+        )  # fmt: skip
+
+
 async def _scrape_segment(fetcher: Fetcher, seg: SegmentKey, settings: Settings) -> SegmentResult:
     _, slug, contract = seg
     try:
@@ -277,7 +289,11 @@ async def run_daily(
     circuit = False
     try:
         # 1. elenchi
-        seg_results = list(await asyncio.gather(*(_scrape_segment(site, s, settings) for s in segments)))
+        beat = asyncio.create_task(_heartbeat(site, "elenchi", minutes))
+        try:
+            seg_results = list(await asyncio.gather(*(_scrape_segment(site, s, settings) for s in segments)))
+        finally:
+            beat.cancel()
         if any(r.circuit for r in seg_results):
             circuit = True
             alerts.append("circuit_open_lists")
