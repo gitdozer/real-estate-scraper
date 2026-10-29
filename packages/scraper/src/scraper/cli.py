@@ -80,6 +80,25 @@ def _cmd_import_legacy(args) -> int:
     return 0
 
 
+def _cmd_probe(args) -> int:
+    from scraper.probe import run_probe
+    from scraper.sources.trovacasa import list_url
+
+    settings = load_settings(Path(args.config_dir) / "settings.yaml", {})
+    phases = [(float(r), float(m)) for r, m in (p.split(":") for p in args.phases.split(","))]
+    urls = [list_url(args.city, contract, page) for page in range(1, 400) for contract in ("vendita", "affitto")]
+    results = asyncio.run(run_probe(urls, phases, settings))
+    summary = "## Diagnosi del ritmo\n\n| req/s | minuti | richieste | ok | timeout | latenza media (s) |\n|---:|---:|---:|---:|---:|---:|\n"
+    summary += "".join(
+        f"| {p['rate']} | {p['minutes']:.0f} | {p['requests']} | {p['ok']} | {p['timeouts']} | {p['latency_avg_s']} |\n" for p in results
+    )
+    print(summary)
+    if os.environ.get("GITHUB_STEP_SUMMARY"):
+        with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:
+            f.write(summary)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="scraper", description="Raccolta giornaliera degli annunci immobiliari")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -99,6 +118,12 @@ def build_parser() -> argparse.ArgumentParser:
     _add_storage_args(status)
     status.add_argument("--max-age-days", type=int, default=2)
     status.set_defaults(func=_cmd_status)
+
+    probe = sub.add_parser("probe", help="diagnosi: quante richieste accetta il sito a ritmi diversi")
+    probe.add_argument("--city", default="milano", help="slug del comune le cui pagine elenco usare")
+    probe.add_argument("--phases", default="1:10,2:5,4:5", help="fasi 'richieste_al_secondo:minuti' separate da virgola")
+    probe.add_argument("--config-dir", default="config")
+    probe.set_defaults(func=_cmd_probe)
 
     legacy = sub.add_parser("import-legacy", help="importa lo storico CSV del vecchio scraper (una tantum)")
     _add_storage_args(legacy)

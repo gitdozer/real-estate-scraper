@@ -1,0 +1,29 @@
+# Diagnosi del limite di frequenza del sito visto dai server di GitHub. Solo avvio manuale.
+# Non usa credenziali e non scrive dati: misura quante pagine elenco il sito restituisce
+# a ritmi diversi (richieste al secondo) e riporta solo conteggi. Vedi docs/runbook.md.
+name: Diagnosi ritmo
+
+on:
+  workflow_dispatch:
+    inputs:
+      phases:
+        description: "Fasi 'richieste_al_secondo:minuti' separate da virgola"
+        type: string
+        default: "1:10,2:5,4:5"
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e  # v10.3.2
+      - name: Installa le dipendenze
+        run: uv sync --locked --package scraper --no-dev
+      - name: Diagnosi
+        env:
+          IN_PHASES: ${{ inputs.phases }}
+        run: uv run --no-dev python -m scraper probe --phases "$IN_PHASES"
