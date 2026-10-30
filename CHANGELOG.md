@@ -4,7 +4,8 @@ Changes per component. Versions follow [SemVer](https://semver.org/), with tags 
 
 ## scraper
 
-### Unreleased
+### 0.1.3 — 2026-10-30
+- Request rate to the site lowered to **0.5 requests/s** (measured: 1,303 distinct pages without stalling from GitHub; ~2.4/s stalls after ~750 pages). Maximum run duration 330 minutes and job limit 350 also for the nightly run.
 - The deadline also stops retries: after it a failed attempt is not retried (on 2026-10-30 the search-results phase overran its deadline by an hour because of retries).
 - When the circuit breaker opens, the search-result and detail pages already downloaded are kept instead of being discarded; an interrupted segment still never counts as complete.
 - `probe` never repeats a URL (a repeated page may be served from the site's cache and hides the limit), stops when the URLs run out, and logs cumulative counts every minute; "Diagnosi ritmo" now defaults to 0.5 requests/s for 45 minutes. Analysis of run 41024689477 in decision 0006.

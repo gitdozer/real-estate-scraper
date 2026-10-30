@@ -1,6 +1,6 @@
 # 0006 — Limited request rate towards the site (~3 requests per second)
 
-Date: 2026-10-29 · Status: accepted, under review (see the second update of 2026-10-30)
+Date: 2026-10-29 · Status: accepted (rate revised to 0.5 requests/s on 2026-10-30)
 
 ## Context
 The first launch on GitHub Actions (27 October) and the runs on the following days were all cancelled by the job time limit (350 minutes, then 120) without writing anything. The progress logs showed that the run was stuck in the **search-results phase**:
@@ -40,6 +40,12 @@ The `probe` diagnosis that suggested "~3/s is fine" was flawed: it cycled over *
 
 **Working hypothesis:** the site tolerates ~700–800 requests to distinct pages from one datacenter IP within a short window, and then penalises the IP for hours. It is not yet known whether a slow enough sustained rate (e.g. 0.5/s) stays under the limit. The `probe` command now never repeats a URL and logs cumulative counts every minute; the next diagnosis runs at 0.5 requests/s for 45 minutes (~1,350 distinct pages, well beyond the ~760 threshold).
 
+### Result of the corrected diagnosis (run 41058341202)
+
+At **0.5 requests/s, one connection, never repeating a URL**: 1,303 distinct pages in 45 minutes, 1,297 answered, 3 isolated timeouts, 3 404s past the end of the list. The rate stayed at 30 requests per minute throughout, well beyond the ~750 pages where the faster runs stalled. So the limit does depend on the rate, but it is far lower than we thought: the site seems to allow a burst of ~700–750 requests and then a sustained rate somewhere between 0.5/s (holds) and ~2.4/s (stalls).
+
+**Revised decision:** `site_rate_per_s = 0.5`; `max_runtime_minutes = 330` and a 350-minute job limit for the nightly run too (the repository is public: Actions minutes are free). A faster rate (e.g. 1/s) can be measured later with the same probe; the rate goes up only after a probe holds for at least 45 minutes.
+
 ## Decision
 - The HTTP client uses **a single connection** to the site and to the photo host (`site_concurrency = image_concurrency = 1`) and respects a **maximum request rate**: `site_rate_per_s = 3`, `image_rate_per_s = 4` (the photo limit has not been measured yet). With real latencies (0.3–0.6 s) the effective rate is ~2–3 requests/s.
 - **Every failed attempt** (timeout, 5xx, 429) counts immediately towards the error rate: if it exceeds 20%, concurrency and rate are halved (down to 0.25 requests/s), and then the circuit breaker opens.
@@ -51,6 +57,6 @@ The `probe` diagnosis that suggested "~3/s is fine" was flawed: it cycled over *
 - **Running from the user's PC**: ruled out by the project constraints.
 
 ## Consequences
-- Estimated daily run: ~1,700 result pages + ~7,000 detail pages ≈ 60 minutes, within the 100-minute budget.
-- First launch: ~35,000 detail pages ≈ 4 hours. Thanks to the deadlines it completes over 1–2 runs (detail pages not yet downloaded stay in the queue); the missing photos follow on the next days.
+- *(Superseded by the revision of 2026-10-30.)* At 0.5 requests/s: ~1,700 result pages ≈ 1 hour, then ~7,000–8,000 detail pages in the remaining ~3.5 hours; the daily run lasts ~5.5 hours, within the 350-minute job limit. That covers the 7-day rotation (~5,000 a day) plus the new listings.
+- Bootstrap: the ~20,000 listings still without a detail page are worked off over ~3 days (the queue carries over); the missing photos follow.
 - The rate can be raised cautiously by watching the heartbeat in the logs (timeouts = too fast).

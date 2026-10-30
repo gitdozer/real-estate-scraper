@@ -33,9 +33,17 @@ def test_scrape_job_timeout_is_an_input_with_daily_default():
 
     wf = yaml.safe_load((REPO / ".github" / "workflows" / "scrape.yml").read_text(encoding="utf-8"))
     triggers = wf.get("on") or wf.get(True)  # PyYAML legge la chiave "on" come True
-    assert triggers["workflow_dispatch"]["inputs"]["job_timeout_minutes"]["default"] == 120
-    assert "inputs.job_timeout_minutes" in str(wf["jobs"]["scrape"]["timeout-minutes"])
-    assert "120" in str(wf["jobs"]["scrape"]["timeout-minutes"])  # valore per il run pianificato
+    inputs = triggers["workflow_dispatch"]["inputs"]
+    timeout_expr = str(wf["jobs"]["scrape"]["timeout-minutes"])
+    assert "inputs.job_timeout_minutes" in timeout_expr
+    scheduled = int(re.search(r"\|\|\s*(\d+)", timeout_expr).group(1))  # value for the scheduled run
+    settings = yaml.safe_load((REPO / "config" / "settings.yaml").read_text(encoding="utf-8"))
+    # The job limit must leave a margin over the run's own limit (installation + writing),
+    # or GitHub kills the job before the run can write what it collected.
+    for job_limit in (inputs["job_timeout_minutes"]["default"], scheduled):
+        assert job_limit <= 360  # GitHub-hosted runner maximum
+        assert job_limit >= settings["max_runtime_minutes"] + 15
+        assert job_limit >= inputs["max_runtime_minutes"]["default"] + 15
     # GitHub passa gli input come testo ('60'): timeout-minutes vuole un numero → conversione esplicita
     assert "fromJSON(format(" in str(wf["jobs"]["scrape"]["timeout-minutes"])
 

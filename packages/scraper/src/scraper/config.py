@@ -23,7 +23,7 @@ class Settings(BaseModel):
 
     site_concurrency: int = Field(1, gt=0)
     image_concurrency: int = Field(1, gt=0)
-    site_rate_per_s: float = Field(3.0, ge=0)
+    site_rate_per_s: float = Field(0.5, ge=0)
     image_rate_per_s: float = Field(4.0, ge=0)
     max_retries: int = Field(4, gt=0)
     timeout_s: float = 30.0
@@ -42,7 +42,7 @@ class Settings(BaseModel):
     raw_retention_days: int = 90
     raw_max_per_run: int = 3000
     state_history_days: int = 30
-    max_runtime_minutes: int = Field(100, gt=0)
+    max_runtime_minutes: int = Field(330, gt=0)
     full_details: bool = False
     max_pages: int = 0
 

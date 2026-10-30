@@ -4,7 +4,7 @@
 # --- Rete ---
 site_concurrency: 1          # connessioni contemporanee verso il sito. 1: da GitHub, con più connessioni in parallelo il sito mette l'IP in penalità per ore (decisione 0006)
 image_concurrency: 1         # connessioni contemporanee verso il server delle foto (prudenza, vedi sopra)
-site_rate_per_s: 3.0         # ritmo massimo verso il sito (richieste/s). Da GitHub il sito tollera ~3/s; a ~12/s rallenta tutto (diagnosi 2026-10-29). 0 = nessun limite
+site_rate_per_s: 0.5         # maximum request rate to the site (requests/s). From GitHub 0.5/s held for 1,303 distinct pages; ~2.4/s stalls after ~750 (decision 0006). 0 = no limit
 image_rate_per_s: 4.0        # ritmo massimo verso il server delle foto (richieste/s)
 max_retries: 4               # tentativi massimi per richiesta (errori di rete, 5xx, 429)
 timeout_s: 30.0              # timeout di una singola richiesta, in secondi
@@ -31,6 +31,6 @@ raw_max_per_run: 3000        # pagine HTML grezze (nuovi/cambiati) conservate pe
 state_history_days: 30       # giorni di conservazione delle copie dello stato
 
 # --- Esecuzione ---
-max_runtime_minutes: 100     # durata massima del run; il lavoro non fatto passa al giorno dopo
+max_runtime_minutes: 330     # maximum run duration (the job limit is 350); work not done moves to the next day. At 0.5 req/s the lists take ~1 hour
 full_details: false          # true = scarica il dettaglio di tutti gli annunci
 max_pages: 0                 # 0 = tutte le pagine; >0 solo per test (blocca le scomparse)

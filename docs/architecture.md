@@ -48,7 +48,7 @@ Client: `http.Fetcher` (async httpx), with real-browser headers and compression 
 |---|---|---|
 | `site_concurrency` | 1 | concurrent connections to trovacasa.it. **Just one**: from GitHub, with several parallel connections the site puts our IP under a penalty (it throttles or stalls it) for hours |
 | `image_concurrency` | 1 | concurrent connections to the photo server (a different host) |
-| `site_rate_per_s` | 3 | **maximum request rate** to the site (requests/s): at least 1/3 s must pass between the start of two requests. From GitHub the site tolerates ~3/s; at ~12/s it leaves requests hanging — see [decisions/0006](decisions/0006-rate-limiting.md) |
+| `site_rate_per_s` | 0.5 | **maximum request rate** to the site (requests/s): at least 2 s must pass between the start of two requests. From GitHub 0.5/s held for 1,303 distinct pages, while at ~2.4/s the site stalls after ~750 pages; at ~12/s it leaves requests hanging — see [decisions/0006](decisions/0006-rate-limiting.md) |
 | `image_rate_per_s` | 4 | maximum request rate to the photo server |
 | `max_retries` | 4 | maximum attempts per request |
 | `timeout_s` | 30 | timeout for a single request |
