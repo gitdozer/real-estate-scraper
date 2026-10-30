@@ -61,3 +61,26 @@ def test_refused_run_exits_2(tmp_path, monkeypatch):
 
     monkeypatch.setattr(cli, "run_daily", refuse)
     assert main(["run", "--storage", "local", "--local-root", str(tmp_path), "--cities", "marnate"]) == 2
+
+
+def test_probe_detail_kind_harvests_urls_then_probes_them(monkeypatch, capsys):
+    import scraper.probe as probe
+
+    seen = {}
+
+    async def fake_harvest(list_urls, city, contract, rate, settings, **kw):
+        seen["harvest"] = (len(list_urls), city, contract, rate)
+        return ["https://www.trovacasa.it/annunci/a", "https://www.trovacasa.it/annunci/b"], {}
+
+    async def fake_probe(urls, phases, settings, concurrency=1, **kw):
+        seen["probe"] = (urls, phases, concurrency)
+        return [{"rate": 2.5, "minutes": 45, "requests": 2, "ok": 2, "timeouts": 0, "latency_avg_s": 0.5}]
+
+    monkeypatch.setattr(probe, "harvest_detail_urls", fake_harvest)
+    monkeypatch.setattr(probe, "run_probe", fake_probe)
+    monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
+    args = ["probe", "--kind", "detail", "--concurrency", "2", "--phases", "2.5:45", "--harvest-pages", "10"]
+    assert main(args) == 0
+    assert seen["harvest"] == (10, "milano", "vendita", 0.5)  # search-result pages read below their limit
+    assert seen["probe"][1:] == ([(2.5, 45.0)], 2)
+    assert "detail pages, 2 connection(s)" in capsys.readouterr().out

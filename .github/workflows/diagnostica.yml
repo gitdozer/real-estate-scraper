@@ -10,6 +10,15 @@ on:
         description: "Fasi 'richieste_al_secondo:minuti' separate da virgola"
         type: string
         default: "0.5:45"
+      kind:
+        description: "Pages to probe: list (search results) or detail"
+        type: choice
+        options: [list, detail]
+        default: list
+      concurrency:
+        description: "Connections sharing the rate"
+        type: string
+        default: "1"
 
 permissions:
   contents: read
@@ -17,7 +26,7 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 75  # detail kind: ~10 min of URL harvesting before the phases
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e  # v10.3.2
@@ -26,4 +35,6 @@ jobs:
       - name: Diagnosi
         env:
           IN_PHASES: ${{ inputs.phases }}
-        run: uv run --no-dev python -m scraper probe --phases "$IN_PHASES"
+          IN_KIND: ${{ inputs.kind }}
+          IN_CONCURRENCY: ${{ inputs.concurrency }}
+        run: uv run --no-dev python -m scraper probe --phases "$IN_PHASES" --kind "$IN_KIND" --concurrency "$IN_CONCURRENCY"

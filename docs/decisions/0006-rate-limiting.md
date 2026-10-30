@@ -46,6 +46,10 @@ At **0.5 requests/s, one connection, never repeating a URL**: 1,303 distinct pag
 
 **Revised decision:** `site_rate_per_s = 0.5`; `max_runtime_minutes = 330` and a 350-minute job limit for the nightly run too (the repository is public: Actions minutes are free). A faster rate (e.g. 1/s) can be measured later with the same probe; the rate goes up only after a probe holds for at least 45 minutes.
 
+### Old-scraper log: detail pages tolerate a much higher rate (2026-10-30)
+
+A log of the old scraper (GitHub Actions, Azure westus, 2026-10-06) shows: 714 search-result pages one at a time with a 2.5 s pause (**0.30 req/s**, 39.5 minutes, 0 errors), then **17,132 detail pages with 4 connections at ~2.9 req/s for 99 minutes**, with 2 "Server disconnected" errors and 3 listings missing. All our stalls happened on search-result pages, and so did the probes. Working hypothesis: the site limits mainly **search-result pages** (~0.5 req/s sustainable), much less detail pages; the "parallel connections" conclusion of the first update came from search-result pages too. Alternatively the site may have tightened its limits after 2026-10-06 (possibly after our first launch at ~12 req/s on 2026-10-27). The `probe` command can now probe detail pages (`--kind detail`, `--concurrency`); next measurement: detail pages at 2.5 req/s with 2 connections for 45 minutes.
+
 ## Decision
 - The HTTP client uses **a single connection** to the site and to the photo host (`site_concurrency = image_concurrency = 1`) and respects a **maximum request rate**: `site_rate_per_s = 3`, `image_rate_per_s = 4` (the photo limit has not been measured yet). With real latencies (0.3–0.6 s) the effective rate is ~2–3 requests/s.
 - **Every failed attempt** (timeout, 5xx, 429) counts immediately towards the error rate: if it exceeds 20%, concurrency and rate are halved (down to 0.25 requests/s), and then the circuit breaker opens.

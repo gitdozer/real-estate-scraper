@@ -81,17 +81,23 @@ def _cmd_import_legacy(args) -> int:
 
 
 def _cmd_probe(args) -> int:
-    from scraper.probe import run_probe
+    from scraper.probe import harvest_detail_urls, run_probe
     from scraper.sources.trovacasa import list_url
 
     settings = load_settings(Path(args.config_dir) / "settings.yaml", {})
     phases = [(float(r), float(m)) for r, m in (p.split(":") for p in args.phases.split(","))]
-    # Distinct pages only (the probe never repeats a URL): ~2,000 pages, enough for 0.5 req/s for an hour.
-    urls = [list_url(args.city, contract, page) for page in range(1, 1000) for contract in ("vendita", "affitto")]
-    results = asyncio.run(run_probe(urls, phases, settings))
-    summary = "## Diagnosi del ritmo\n\n| req/s | minuti | richieste | ok | timeout | latenza media (s) |\n|---:|---:|---:|---:|---:|---:|\n"
+    if args.kind == "detail":
+        # Detail URLs come from sale search-result pages read slowly (0.5 req/s, below their limit).
+        pages = [list_url(args.city, "vendita", page) for page in range(1, args.harvest_pages + 1)]
+        urls, _ = asyncio.run(harvest_detail_urls(pages, args.city, "vendita", rate=0.5, settings=settings))
+    else:
+        # Distinct pages only (the probe never repeats a URL): ~2,000 pages, enough for 0.5 req/s for an hour.
+        urls = [list_url(args.city, contract, page) for page in range(1, 1000) for contract in ("vendita", "affitto")]
+    results = asyncio.run(run_probe(urls, phases, settings, concurrency=args.concurrency))
+    summary = f"## Diagnosi del ritmo ({args.kind} pages, {args.concurrency} connection(s))\n\n"
+    summary += "| req/s | minuti | richieste | ok | timeout | latenza media (s) |\n|---:|---:|---:|---:|---:|---:|\n"
     summary += "".join(
-        f"| {p['rate']} | {p['minutes']:.0f} | {p['requests']} | {p['ok']} | {p['timeouts']} | {p['latency_avg_s']} |\n" for p in results
+        f"| {p['rate']} | {p['minutes']:g} | {p['requests']} | {p['ok']} | {p['timeouts']} | {p['latency_avg_s']} |\n" for p in results
     )
     print(summary)
     if os.environ.get("GITHUB_STEP_SUMMARY"):
@@ -122,7 +128,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     probe = sub.add_parser("probe", help="diagnosi: quante richieste accetta il sito a ritmi diversi")
     probe.add_argument("--city", default="milano", help="slug del comune le cui pagine elenco usare")
-    probe.add_argument("--phases", default="1:10,2:5,4:5", help="fasi 'richieste_al_secondo:minuti' separate da virgola")
+    probe.add_argument("--phases", default="0.5:45", help="fasi 'richieste_al_secondo:minuti' separate da virgola")
+    probe.add_argument("--kind", choices=("list", "detail"), default="list", help="pages to probe: search results or detail pages")
+    probe.add_argument("--concurrency", type=int, default=1, help="connections sharing the rate")
+    probe.add_argument("--harvest-pages", type=int, default=300, help="detail kind: search-result pages read to collect URLs (24 each)")
     probe.add_argument("--config-dir", default="config")
     probe.set_defaults(func=_cmd_probe)
 

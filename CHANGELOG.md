@@ -4,6 +4,9 @@ Changes per component. Versions follow [SemVer](https://semver.org/), with tags 
 
 ## scraper
 
+### Unreleased
+- `probe --kind detail`: collects distinct detail-page URLs from search-result pages read at 0.5 req/s, then probes them; `--concurrency` connections share one rate. The "Diagnosi ritmo" workflow has the matching inputs and a 75-minute limit.
+
 ### 0.1.3 — 2026-10-30
 - Request rate to the site lowered to **0.5 requests/s** (measured: 1,303 distinct pages without stalling from GitHub; ~2.4/s stalls after ~750 pages). Maximum run duration 330 minutes and job limit 350 also for the nightly run.
 - The deadline also stops retries: after it a failed attempt is not retried (on 2026-10-30 the search-results phase overran its deadline by an hour because of retries).
