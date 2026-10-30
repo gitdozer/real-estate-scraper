@@ -2,6 +2,7 @@
 *.csv
 !packages/scraper/tests/fixtures/*.csv
 *.docx
+*.geojson
 data/
 .env
 .env.*
