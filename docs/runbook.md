@@ -116,7 +116,7 @@ The full report, with samples of the errors, is on R2 at `runs/dt=YYYY-MM-DD/rep
 
 ## Diagnosing the request rate the site accepts
 
-If the heartbeat in the collection logs shows many `ReadTimeout`s (hanging requests), the site is slowing us down: the `site_rate_per_s` rate is too high for GitHub's IP. To measure a sustainable rate: **Actions → Diagnosi ritmo → Run workflow**, with phases given as `requests_per_second:minutes` (default `1:10,2:5,4:5`). It uses no credentials and writes no data; for each phase the summary reports requests, responses, timeouts and latency. Locally: `uv run python -m scraper probe --phases "1:2,2:2"`.
+If the heartbeat in the collection logs shows many `ReadTimeout`s (hanging requests), the site is slowing us down: the `site_rate_per_s` rate is too high for GitHub's IP. To measure a sustainable rate: **Actions → Diagnosi ritmo → Run workflow**, with phases given as `requests_per_second:minutes` (default `0.5:45`). It uses no credentials and writes no data; it requests each search-results page **only once** (a repeated page may come from the site's cache and would not show the limit), logs cumulative counts every minute, and for each phase the summary reports requests, responses, timeouts and latency. Locally: `uv run python -m scraper probe --phases "1:2,2:2"`.
 
 ## Plan B: if GitHub Actions gets blocked
 

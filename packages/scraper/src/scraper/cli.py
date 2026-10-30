@@ -86,7 +86,8 @@ def _cmd_probe(args) -> int:
 
     settings = load_settings(Path(args.config_dir) / "settings.yaml", {})
     phases = [(float(r), float(m)) for r, m in (p.split(":") for p in args.phases.split(","))]
-    urls = [list_url(args.city, contract, page) for page in range(1, 400) for contract in ("vendita", "affitto")]
+    # Distinct pages only (the probe never repeats a URL): ~2,000 pages, enough for 0.5 req/s for an hour.
+    urls = [list_url(args.city, contract, page) for page in range(1, 1000) for contract in ("vendita", "affitto")]
     results = asyncio.run(run_probe(urls, phases, settings))
     summary = "## Diagnosi del ritmo\n\n| req/s | minuti | richieste | ok | timeout | latenza media (s) |\n|---:|---:|---:|---:|---:|---:|\n"
     summary += "".join(

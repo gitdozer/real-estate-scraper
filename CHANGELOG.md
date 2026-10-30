@@ -4,6 +4,9 @@ Changes per component. Versions follow [SemVer](https://semver.org/), with tags 
 
 ## scraper
 
+### Unreleased
+- `probe` never repeats a URL (a repeated page may be served from the site's cache and hides the limit), stops when the URLs run out, and logs cumulative counts every minute; "Diagnosi ritmo" now defaults to 0.5 requests/s for 45 minutes. Analysis of run 41024689477 in decision 0006.
+
 ### 0.1.2 — 2026-10-30
 - A single connection to the site and to the photo server: from GitHub, with several parallel connections the site puts our IP under a penalty for hours (update to decision 0006).
 

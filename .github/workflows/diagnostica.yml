@@ -9,7 +9,7 @@ on:
       phases:
         description: "Fasi 'richieste_al_secondo:minuti' separate da virgola"
         type: string
-        default: "1:10,2:5,4:5"
+        default: "0.5:45"
 
 permissions:
   contents: read
