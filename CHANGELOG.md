@@ -1,21 +1,21 @@
 # Changelog
 
-Modifiche per componente. Versioni [SemVer](https://semver.org/lang/it/), tag `<componente>-vX.Y.Z`.
+Changes per component. Versions follow [SemVer](https://semver.org/), with tags `<component>-vX.Y.Z`.
 
 ## scraper
 
 ### 0.1.2 — 2026-10-30
-- Una sola connessione verso il sito e verso le foto: con più connessioni in parallelo, da GitHub il sito mette l'IP in penalità per ore (aggiornamento della decisione 0006).
+- A single connection to the site and to the photo server: from GitHub, with several parallel connections the site puts our IP under a penalty for hours (update to decision 0006).
 
 ### 0.1.1 — 2026-10-29
-- Ritmo limitato verso il sito (3 richieste/s) e le foto (4/s): da GitHub il sito lascia appese le richieste oltre ~3/s (diagnosi in `docs/decisioni/0006`).
-- Il freno conta ogni tentativo fallito e dimezza anche il ritmo; scadenza anche per la fase elenchi.
-- Log di avanzamento per fase, battito ogni minuto, latenze nelle statistiche; limite del job impostabile (default 120).
-- Comando `probe` e workflow "Diagnosi ritmo".
+- Rate-limited requests to the site (3 requests/s) and to the photo server (4/s): from GitHub the site leaves requests hanging above ~3/s (diagnosis in `docs/decisions/0006`).
+- The backoff counts every failed attempt and halves the request rate too; the search-results phase now has a deadline as well.
+- Per-phase progress logs, a heartbeat every minute, latencies in the statistics; configurable job time limit (default 120).
+- `probe` command and the "Diagnosi ritmo" (request-rate diagnosis) workflow.
 
 ### 0.1.0 — 2026-10-25
-- Raccolta giornaliera da trovacasa.it: elenchi, dettagli, impronte foto, stato ed eventi, controlli di qualità, CLI `run`/`status`/`import-legacy`; import dello storico Milano del 2026-10-17.
-- Robustezza (revisione indipendente): riesecuzione corretta anche dopo un run interrotto, rifiuto delle date passate, errori di lettura gestiti pagina per pagina, calo di un segmento accettato dopo 3 run, errori imprevisti senza dati nei log pubblici.
-- Revisione finale: elaborazione a blocchi (memoria limitata al bootstrap), HTML grezzo compresso e limitato, 401/403/451 trattati come blocco, codici HTTP nel riepilogo, pagine di dettaglio non riconosciute = errore, comuni con 0/1 annuncio, action GitHub fissate a un commit e dipendenze `--locked`.
-- Workflow GitHub Actions: test a ogni push, raccolta giornaliera (02:17 UTC) e avvio manuale.
-- Struttura del monorepo, configurazione dei comuni (`config/cities.yaml`) e dei parametri (`config/settings.yaml`).
+- Daily collection from trovacasa.it: search results, detail pages, photo fingerprints, state and events, quality checks, `run`/`status`/`import-legacy` CLI; import of the Milano historical data from 2026-10-17.
+- Robustness (independent review): correct reruns even after an interrupted run, past dates rejected, read errors handled page by page, a segment's drop accepted after 3 runs, unexpected errors without listing data in public logs.
+- Final review: batch processing (bounded memory at bootstrap), raw HTML compressed and capped, 401/403/451 treated as a block, HTTP status codes in the summary, unrecognized detail pages counted as errors, municipalities with 0/1 listings, GitHub actions pinned to a commit and dependencies installed with `--locked`.
+- GitHub Actions workflows: tests on every push, daily collection (02:17 UTC) and manual trigger.
+- Monorepo structure, configuration of the municipalities (`config/cities.yaml`) and of the parameters (`config/settings.yaml`).

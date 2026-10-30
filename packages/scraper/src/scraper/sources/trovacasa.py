@@ -1,4 +1,4 @@
-"""Fonte trovacasa.it: URL e parsing delle pagine. Struttura del sito in docs/fonti/trovacasa.md."""
+"""Fonte trovacasa.it: URL e parsing delle pagine. Struttura del sito in docs/sources/trovacasa.md."""
 
 import re
 

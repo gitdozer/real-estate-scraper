@@ -1,123 +1,123 @@
-# Runbook — come si usa e cosa fare quando qualcosa va storto
+# Runbook — how to use it and what to do when something goes wrong
 
-Tutti i comandi si lanciano dalla cartella principale del repository.
+Run every command from the repository root.
 
-## Configurazione iniziale (una volta)
+## Initial setup (once)
 
 ### 1. Cloudflare R2
 
-1. Nel pannello Cloudflare: **R2 Object Storage** → attivare R2 (può essere richiesto un metodo di pagamento; il piano gratuito include 10 GB).
-2. **Create bucket**, es. `real-estate-data`, posizione automatica. Lasciarlo **privato** (nessun accesso pubblico).
-3. **Manage R2 API Tokens** → **Create API token**: permesso **Object Read & Write**, limitato al **solo bucket** creato. Annotare *Access Key ID*, *Secret Access Key* e l'*Account ID* (visibile nella pagina R2).
-4. Facoltativo ma consigliato: impostare un avviso di fatturazione a 1 €.
+1. In the Cloudflare dashboard: **R2 Object Storage** → enable R2 (you may be asked for a payment method; the free tier includes 10 GB).
+2. **Create bucket**, e.g. `real-estate-data`, with automatic location. Keep it **private** (no public access).
+3. **Manage R2 API Tokens** → **Create API token**: permission **Object Read & Write**, restricted to **that bucket only**. Write down the *Access Key ID*, the *Secret Access Key* and the *Account ID* (shown on the R2 page).
+4. Optional but recommended: set a billing alert at €1.
 
 ### 2. GitHub
 
-1. Creare il repository (pubblico, vedi [decisioni/0003](decisioni/0003-github-actions-r2.md)) e fare push del branch `main`.
-2. **Settings → Secrets and variables → Actions → New repository secret**, quattro secrets:
+1. Create the repository (public, see [decisions/0003](decisions/0003-github-actions-r2.md)) and push the `main` branch.
+2. **Settings → Secrets and variables → Actions → New repository secret**, four secrets:
    `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`.
-3. I workflow sono in `.github/workflows/`: `Test` (a ogni push) e `Raccolta giornaliera` (ogni notte alle 02:17 UTC + avvio manuale da **Actions → Raccolta giornaliera → Run workflow**).
+3. The workflows live in `.github/workflows/`: `Test` (on every push) and `Raccolta giornaliera` (the daily collection: every night at 02:17 UTC, plus manual trigger from **Actions → Raccolta giornaliera → Run workflow**).
 
-### 3. Primo avvio (bootstrap)
+### 3. First start (bootstrap)
 
-In quest'ordine:
+In this order:
 
-1. **Import dello storico** da locale verso R2 (vedi "Importare lo storico" sotto), con le 4 variabili `R2_*` impostate nel terminale.
-2. **Prova da GitHub su due comuni piccoli**: Run workflow con `cities = gorla-minore,marnate`. Verificare nel riepilogo che i segmenti siano completi e che non ci siano errori. Il riepilogo riporta la riga **Codici HTTP**: **se compaiono 403 (o 401/451) o l'avviso `circuit_open`**, trovacasa blocca gli IP di GitHub: fermarsi e passare al piano B (in fondo).
-3. **Bootstrap completo**, da avviare **di giorno** (non tra mezzanotte e le 4, quando partirebbe anche il cron notturno e verrebbe trattato come riesecuzione dello stesso giorno): Run workflow con `max_runtime_minutes = 320` e gli altri campi vuoti (il job ha un limite di 350 minuti: il margine serve a installazione e scrittura). Scarica i dettagli di tutti i ~38.000 annunci e le prime impronte delle foto (circa 1–2 ore). Le impronte mancanti vengono completate nei giorni successivi.
-4. Controllare il riepilogo e `uv run python -m scraper status --storage r2`.
-5. Da qui in poi il cron gira da solo ogni notte. Annotare in `docs/fonti/trovacasa.md` durata, errori e minuti consumati dei primi run.
+1. **Import the historical data** from your machine to R2 (see "Importing the historical data" below), with the 4 `R2_*` variables set in the terminal.
+2. **Test from GitHub on two small municipalities**: Run workflow with `cities = gorla-minore,marnate`. Check in the summary that the segments are complete and that there are no errors. The summary includes a **Codici HTTP** (HTTP status codes) line: **if it shows 403 (or 401/451), or the `circuit_open` warning appears**, trovacasa is blocking GitHub's IPs: stop and switch to plan B (at the end of this page).
+3. **Full bootstrap**, to be started **during the day** (not between midnight and 04:00, because the nightly cron would also start and would be treated as a rerun of the same day): Run workflow with `max_runtime_minutes = 320` and the other fields empty (the job has a 350-minute limit: the margin covers installation and writing). It downloads the detail pages of all ~38,000 listings and the first photo fingerprints (roughly 1–2 hours). Missing fingerprints are filled in over the following days.
+4. Check the summary and `uv run python -m scraper status --storage r2`.
+5. From now on the cron runs by itself every night. Record the duration, errors and minutes consumed by the first runs in `docs/sources/trovacasa.md`.
 
-## Eseguire la raccolta
+## Running the collection
 
 ```bash
-uv sync --package scraper                      # una volta, o dopo un aggiornamento delle dipendenze
-uv run python -m scraper run [opzioni]
+uv sync --package scraper                      # once, or after a dependency update
+uv run python -m scraper run [options]
 ```
 
-| Opzione | Effetto |
+| Option | Effect |
 |---|---|
-| `--storage local` / `--storage r2` | dove leggere/scrivere i dati. `local` (default) usa la cartella `--local-root` (default `data/`, esclusa da git); `r2` usa le variabili d'ambiente `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` |
-| `--cities gorla-minore,marnate` | solo questi comuni (slug di `config/cities.yaml`); default tutti |
-| `--date 2026-10-26` | data del run (default: oggi, fuso Europe/Rome) |
-| `--full-details` | scarica il dettaglio di tutti gli annunci, non solo nuovi/cambiati/rotazione |
-| `--max-pages N` | solo le prime N pagine per segmento — **solo per prove**: blocca la registrazione di scomparse e fa terminare il run con errore |
-| `--max-runtime-minutes M` | durata massima (default 100). Oltre l'85% non si scaricano altri dettagli, oltre il 90% altre foto: il lavoro restante passa al giorno dopo |
-| `--dry-run` | esegue tutto ma non scrive nulla |
+| `--storage local` / `--storage r2` | where data is read from and written to. `local` (the default) uses the `--local-root` folder (default `data/`, excluded from git); `r2` uses the environment variables `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` |
+| `--cities gorla-minore,marnate` | only these municipalities (slugs from `config/cities.yaml`); default: all |
+| `--date 2026-10-26` | date of the run (default: today, Europe/Rome time zone) |
+| `--full-details` | downloads the detail page of every listing, not just new / changed / rotation ones |
+| `--max-pages N` | only the first N pages per segment — **for testing only**: it blocks the recording of disappearances and makes the run exit with an error |
+| `--max-runtime-minutes M` | maximum duration (default 100). Past 85% no more detail pages are downloaded, past 90% no more photos: the remaining work is carried over to the next day |
+| `--dry-run` | runs everything but writes nothing |
 
-Il comando termina con **codice 1** (e su GitHub arriva l'email di errore) se un segmento è incompleto, se gli annunci attivi calano più del 5%, o se il sito restituisce troppi errori (circuito aperto). I dati raccolti vengono comunque scritti.
+The command exits with **code 1** (and GitHub sends the failure email) if a segment is incomplete, if active listings drop by more than 5%, or if the site returns too many errors (circuit breaker open). The collected data is written anyway.
 
-Prova veloce in locale (2 comuni piccoli, ~20 secondi):
+Quick local test (2 small municipalities, ~20 seconds):
 
 ```bash
 uv run python -m scraper run --cities gorla-minore,marnate --storage local --local-root data
 ```
 
-## Importare lo storico (una volta sola, prima del primo run)
+## Importing the historical data (once only, before the first run)
 
 ```bash
 uv run python -m scraper import-legacy docs/scraping-data_2026_10_trovacasa_milano_20261017_234300_17304_annunci_completi.csv --storage r2
 ```
 
-Rifiuta di partire se lo stato esiste già (`--force` per forzare: sovrascrive lo stato, da usare solo su un bucket vuoto). Il CSV non è nel repository: si trova nella cartella `docs/` locale ed è copiato su R2 in `legacy/`.
+It refuses to start if the state already exists (`--force` overrides this: it overwrites the state, so use it only on an empty bucket). The CSV is not in the repository: it lives in the local `docs/` folder and is copied to R2 under `legacy/`.
 
-## Controllare che la raccolta sia aggiornata
+## Checking that the collection is up to date
 
 ```bash
 uv run python -m scraper status --storage r2 [--max-age-days 2]
 ```
 
-Stampa la data e l'esito dell'ultimo run; termina con codice 1 se è più vecchio di `--max-age-days` giorni. **Usarlo ogni tanto**: GitHub disattiva le esecuzioni pianificate di un repository pubblico dopo 60 giorni senza commit, e in quel caso non arriva nessuna email.
+It prints the date and outcome of the last run, and exits with code 1 if that run is older than `--max-age-days` days. **Run it every now and then**: GitHub disables scheduled workflows in a public repository after 60 days without commits, and when that happens no email is sent.
 
-## Rieseguire un giorno
+## Rerunning a day
 
-Si può rieseguire **solo l'ultimo giorno raccolto**: basta rilanciare `run` (con la stessa `--date`, se non è oggi). Il run riparte dallo stato **precedente** a quel giorno (copia in `state/history/dt=<data>/`, che è la prima cosa scritta da ogni run: vale anche se il run precedente si era interrotto a metà) per i comuni raccolti, sovrascrive le partizioni del giorno per quei comuni e lascia intatte quelle degli altri. Si può quindi rieseguire anche solo un comune (`--cities`).
+You can rerun **only the most recent collected day**: just launch `run` again (with the same `--date`, if it is not today). For the municipalities being collected, the run restarts from the state as it was **before** that day — from the copy in `state/history/dt=<date>/`, which is the first thing every run writes, so this works even if the previous run was interrupted halfway. It overwrites that day's partitions for those municipalities and leaves the other municipalities' partitions untouched. This means you can also rerun a single municipality (`--cities`).
 
-Una data **precedente all'ultimo run viene rifiutata** (codice di uscita 2): riporterebbe indietro lo stato. Un giorno saltato resta saltato; le date di scomparsa ne tengono conto (intervallo tra `list_last_seen` e `delisted_date`). `--dry-run` è sempre consentito.
+A date **earlier than the last run is rejected** (exit code 2): it would roll the state back. A skipped day stays skipped; disappearance dates account for it (the interval between `list_last_seen` and `delisted_date`). `--dry-run` is always allowed.
 
-## Ripristinare lo stato
+## Restoring the state
 
-Se un run ha prodotto uno stato sbagliato (es. bug), lo stato prima di ogni run è conservato per 30 giorni in `state/history/dt=YYYY-MM-DD/listings.parquet`:
+If a run produced a wrong state (e.g. because of a bug), the state as it was before each run is kept for 30 days in `state/history/dt=YYYY-MM-DD/listings.parquet`:
 
-1. copiare `state/history/dt=<giorno del run sbagliato>/listings.parquet` su `state/listings.parquet`. Il registro `state/segments.parquet` non ha copie: se il run sbagliato lo ha alterato (prima raccolta completa, cali sospetti), correggerlo a mano o cancellarlo (si ricostruisce, ma i segmenti tornano "nuovi" per 7 giorni ai fini della censura);
-2. per rifare quel giorno da zero: cancellare `state/history/dt=<giorno>/`, `runs/dt=<giorno>/` e le partizioni di quel giorno (`observations/`, `details/`, `photos/`, `events/`, `raw/` con `dt=<giorno>`);
-3. rilanciare il run per quel giorno (deve essere l'ultimo giorno raccolto).
+1. copy `state/history/dt=<day of the bad run>/listings.parquet` over `state/listings.parquet`. The registry `state/segments.parquet` has no copies: if the bad run altered it (first complete collection, suspicious drops), fix it by hand or delete it (it gets rebuilt, but the segments then count as "new" again for 7 days for censoring purposes);
+2. to redo that day from scratch: delete `state/history/dt=<day>/`, `runs/dt=<day>/` and that day's partitions (`observations/`, `details/`, `photos/`, `events/`, `raw/` with `dt=<day>`);
+3. launch the run again for that day (it must be the most recent collected day).
 
-## Aggiungere un comune
+## Adding a municipality
 
-1. Trovare lo slug del comune su trovacasa.it: è la parte finale dell'URL `https://www.trovacasa.it/case-in-vendita/<slug>`.
-2. Trovare il codice ISTAT (6 cifre).
-3. Aggiungere una riga a `config/cities.yaml`, aggiornare `docs/panoramica.md` e fare commit.
+1. Find the municipality's slug on trovacasa.it: it is the last part of the URL `https://www.trovacasa.it/case-in-vendita/<slug>`.
+2. Find its ISTAT code (6 digits).
+3. Add a line to `config/cities.yaml`, update `docs/overview.md` and commit.
 
-I primi 7 giorni di un comune nuovo hanno gli annunci marcati `first_seen_censored` (erano probabilmente già online).
+During the first 7 days of a new municipality its listings are flagged `first_seen_censored` (they were probably already online).
 
-## Cosa fare quando arriva un'email di errore
+## What to do when a failure email arrives
 
-Aprire il run su GitHub Actions: il riepilogo mostra quale controllo è fallito.
+Open the run on GitHub Actions: the summary shows which check failed.
 
-| Avviso | Significato | Cosa fare |
+| Warning | Meaning | What to do |
 |---|---|---|
-| `segments_not_ok` con `failed_pages` | alcune pagine elenco non sono state scaricate nemmeno dopo i tentativi | di solito un problema temporaneo del sito: rieseguire il run (anche solo per quei comuni). Nessuna scomparsa è stata registrata per quei comuni |
-| `segments_not_ok` con `incomplete` | raccolti meno del 97% degli annunci dichiarati | controllare se il sito ha cambiato la paginazione; rieseguire |
-| `segments_not_ok` con `suspicious_drop` | gli annunci visti sono calati molto rispetto al giorno prima | possibile guasto o cambio del sito: verificare a mano il sito. Se il calo è reale non serve fare nulla: dopo 3 run consecutivi viene accettato da solo |
-| `drop_confirmed` | un calo ripetuto per 3 run è stato accettato come reale e le scomparse sono state registrate | verificare che sul sito il numero di annunci sia davvero calato |
-| `segments_not_ok` con `no_declared_total` | la pagina 1 non riporta il totale | il sito ha probabilmente cambiato struttura: aggiornare il parser (`sources/trovacasa.py`) e le fixture |
-| `active_drop` | gli annunci attivi sono calati più del 5% | verificare sul sito se è un calo reale |
-| `circuit_open` | troppi errori anche a concorrenza 1 (compresi 401/403/451): il sito è in difficoltà o ci blocca | guardare la riga "Codici HTTP" del riepilogo; se si ripete per giorni (403 persistenti), passare al **piano B** (sotto) |
-| `details_errors` | molti dettagli non scaricati o con pagina non riconosciuta (più di 20 e del 10%) | probabile cambio di struttura del sito o pagina di verifica anti-bot: aprire a mano un annuncio, poi aggiornare il parser e le fixture |
+| `segments_not_ok` with `failed_pages` | some result pages could not be downloaded even after retries | usually a temporary problem on the site: rerun (even just for those municipalities). No disappearances were recorded for those municipalities |
+| `segments_not_ok` with `incomplete` | fewer than 97% of the declared listings were collected | check whether the site changed its pagination; rerun |
+| `segments_not_ok` with `suspicious_drop` | the number of listings seen dropped sharply compared with the previous day | possibly an outage or a site change: check the site by hand. If the drop is real there is nothing to do: after 3 consecutive runs it is accepted automatically |
+| `drop_confirmed` | a drop repeated over 3 runs has been accepted as real and the disappearances have been recorded | check that the number of listings on the site really did go down |
+| `segments_not_ok` with `no_declared_total` | page 1 does not show the total | the site has probably changed its structure: update the parser (`sources/trovacasa.py`) and the fixtures |
+| `active_drop` | active listings dropped by more than 5% | check on the site whether the drop is real |
+| `circuit_open` | too many errors even at concurrency 1 (including 401/403/451): the site is struggling or is blocking us | look at the "Codici HTTP" (HTTP status codes) line in the summary; if it keeps happening for days (persistent 403s), switch to **plan B** (below) |
+| `details_errors` | many detail pages not downloaded or not recognized (more than 20 and more than 10%) | probably a change in the site's structure or an anti-bot check page: open a listing by hand, then update the parser and the fixtures |
 
-Il report completo, con campioni degli errori, è su R2 in `runs/dt=YYYY-MM-DD/report.json`.
+The full report, with samples of the errors, is on R2 at `runs/dt=YYYY-MM-DD/report.json`.
 
-**Errore imprevisto** ("Errore imprevisto: <tipo>" nel log): nel log pubblico compare solo il tipo di errore, perché il testo potrebbe contenere dati degli annunci. Il dettaglio completo (traceback) è su R2 in `runs/crash/<data-ora>.txt`. I dati raccolti fino a quel punto non vengono scritti: rieseguire il run dopo aver capito la causa.
+**Unexpected error** ("Errore imprevisto: <tipo>" — "Unexpected error: <type>" — in the log): the public log shows only the error type, because the message text could contain listing data. The full details (traceback) are on R2 at `runs/crash/<date-time>.txt`. The data collected up to that point is not written: rerun once you understand the cause.
 
-**Run rifiutato** (codice 2): data precedente all'ultimo run, vedi "Rieseguire un giorno".
+**Run rejected** (exit code 2): the date is earlier than the last run; see "Rerunning a day".
 
-**"Configurazione: Variabili d'ambiente mancanti per R2: …"**: uno o più secrets non sono impostati o hanno un nome diverso; controllare Settings → Secrets and variables → Actions.
+**"Configurazione: Variabili d'ambiente mancanti per R2: …"** ("Configuration: missing environment variables for R2: …"): one or more secrets are not set or have a different name; check Settings → Secrets and variables → Actions.
 
-## Diagnosi del ritmo accettato dal sito
+## Diagnosing the request rate the site accepts
 
-Se il battito nei log della raccolta mostra molti `ReadTimeout` (richieste appese) il sito ci sta rallentando: il ritmo `site_rate_per_s` è troppo alto per l'IP di GitHub. Per misurare il ritmo sostenibile: **Actions → Diagnosi ritmo → Run workflow**, con le fasi `richieste_al_secondo:minuti` (default `1:10,2:5,4:5`). Non usa credenziali e non scrive dati; il riepilogo riporta per ogni fase richieste, risposte, timeout e latenza. In locale: `uv run python -m scraper probe --phases "1:2,2:2"`.
+If the heartbeat in the collection logs shows many `ReadTimeout`s (hanging requests), the site is slowing us down: the `site_rate_per_s` rate is too high for GitHub's IP. To measure a sustainable rate: **Actions → Diagnosi ritmo → Run workflow**, with phases given as `requests_per_second:minutes` (default `1:10,2:5,4:5`). It uses no credentials and writes no data; for each phase the summary reports requests, responses, timeouts and latency. Locally: `uv run python -m scraper probe --phases "1:2,2:2"`.
 
-## Piano B: se GitHub Actions viene bloccato
+## Plan B: if GitHub Actions gets blocked
 
-Lo stesso comando gira su qualsiasi macchina: creare una VM gratuita Google Cloud e2-micro (1 GB di RAM: il run elabora i dettagli a blocchi di 500 e resta nell'ordine delle centinaia di MB), installare `uv`, clonare il repository, impostare le 4 variabili `R2_*` e pianificare con cron `uv run python -m scraper run --storage r2` ogni notte. Lo storage su R2 resta lo stesso. Vedi [decisioni/0003](decisioni/0003-github-actions-r2.md).
+The same command runs on any machine: create a free Google Cloud e2-micro VM (1 GB of RAM: the run processes detail pages in batches of 500 and stays in the hundreds of MB), install `uv`, clone the repository, set the 4 `R2_*` variables and schedule `uv run python -m scraper run --storage r2` with cron every night. Storage on R2 stays the same. See [decisions/0003](decisions/0003-github-actions-r2.md).

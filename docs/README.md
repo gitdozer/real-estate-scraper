@@ -1,22 +1,22 @@
-# Documentazione — indice
+# Documentation index
 
-Se riprendi il progetto dopo tempo, leggi in quest'ordine:
+If you are coming back to the project after a while, read these in order:
 
-1. [panoramica.md](panoramica.md) — cos'è il progetto, perché esiste, a che punto è.
-2. [architettura.md](architettura.md) — come funziona la raccolta giornaliera.
-3. [dizionario-dati.md](dizionario-dati.md) — ogni file e colonna raccolti: significato, tipo, origine.
-4. [logica-scomparse.md](logica-scomparse.md) — come si decide che un annuncio è nuovo, cambiato, scomparso o ricomparso.
-5. [runbook.md](runbook.md) — come eseguire, ripristinare, aggiungere un comune, cosa fare in caso di errore.
+1. [overview.md](overview.md) — what the project is, why it exists, and where it stands.
+2. [architecture.md](architecture.md) — how the daily collection works.
+3. [data-dictionary.md](data-dictionary.md) — every file and column we collect: meaning, type, origin.
+4. [disappearance-logic.md](disappearance-logic.md) — how we decide whether a listing is new, changed, gone or has reappeared.
+5. [runbook.md](runbook.md) — how to run the collection, restore the state, add a municipality, and what to do when something fails.
 
-Approfondimenti:
+Further reading:
 
-- [fonti/trovacasa.md](fonti/trovacasa.md) — struttura del sito trovacasa.it, selettori, limiti misurati.
-- [decisioni/](decisioni) — registro delle decisioni, con contesto e alternative scartate:
-  - [0001 — trovacasa.it come fonte iniziale](decisioni/0001-fonte-trovacasa.md)
-  - [0002 — esclusione di casa.it](decisioni/0002-esclusione-casa-it.md)
-  - [0003 — GitHub Actions + Cloudflare R2](decisioni/0003-github-actions-r2.md)
-  - [0004 — monorepo](decisioni/0004-monorepo.md)
-  - [0005 — sparito = venduto, con date separate](decisioni/0005-sparito-uguale-venduto.md)
-  - [0006 — ritmo limitato verso il sito](decisioni/0006-ritmo-limitato.md)
-- [superpowers/specs/](superpowers/specs) — documento di progetto approvato.
-- [superpowers/plans/](superpowers/plans) — piani di implementazione.
+- [sources/trovacasa.md](sources/trovacasa.md) — structure of the trovacasa.it site, CSS selectors, measured limits.
+- [decisions/](decisions) — decision log, with context and the alternatives we considered:
+  - [0001 — trovacasa.it as the initial source](decisions/0001-trovacasa-as-source.md)
+  - [0002 — casa.it excluded](decisions/0002-casa-it-excluded.md)
+  - [0003 — GitHub Actions + Cloudflare R2](decisions/0003-github-actions-r2.md)
+  - [0004 — Monorepo](decisions/0004-monorepo.md)
+  - [0005 — Gone means sold, with separate dates](decisions/0005-gone-means-sold.md)
+  - [0006 — Rate-limited requests to the site](decisions/0006-rate-limiting.md)
+- [superpowers/specs/](superpowers/specs) — the approved design document.
+- [superpowers/plans/](superpowers/plans) — implementation plans.

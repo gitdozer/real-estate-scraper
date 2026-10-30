@@ -1,6 +1,6 @@
 """Riconciliazione dello stato degli annunci: il cuore della regola "sparito = venduto".
 
-Funzione pura (nessun I/O). Regole in docs/logica-scomparse.md; in sintesi:
+Funzione pura (nessun I/O). Regole in docs/disappearance-logic.md; in sintesi:
 - un annuncio presente negli elenchi è attivo (nuovo, invariato, ribassato o ricomparso);
 - un annuncio assente cambia stato SOLO se il suo segmento è stato raccolto per
   intero oggi E il controllo della sua pagina di dettaglio ha dato un esito certo:

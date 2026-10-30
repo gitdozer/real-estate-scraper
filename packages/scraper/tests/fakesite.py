@@ -1,6 +1,6 @@
 """HTML sintetico con la stessa struttura di trovacasa.it, per i test.
 
-Riproduce solo gli elementi che il parser legge (vedi docs/fonti/trovacasa.md).
+Riproduce solo gli elementi che il parser legge (vedi docs/sources/trovacasa.md).
 """
 
 from html import escape

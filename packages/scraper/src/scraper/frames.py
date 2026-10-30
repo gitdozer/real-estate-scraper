@@ -1,4 +1,4 @@
-"""Schemi espliciti delle tabelle Parquet (documentati in docs/dizionario-dati.md).
+"""Schemi espliciti delle tabelle Parquet (documentati in docs/data-dictionary.md).
 
 Tipi fissi anche quando una colonna è tutta nulla o la tabella è vuota: così i file di
 giorni diversi si leggono insieme senza conflitti di tipo.

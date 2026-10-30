@@ -1,6 +1,6 @@
 """Run giornaliero: elenchi → dettagli → stato ed eventi → foto → scrittura (spec §5, §7).
 
-Flusso e garanzie in docs/architettura.md. Punti chiave:
+Flusso e garanzie in docs/architecture.md. Punti chiave:
 - un segmento incompleto non genera scomparse (quality.segment_ok + state.reconcile);
 - il lavoro oltre la scadenza si interrompe ma i dati raccolti si scrivono comunque;
 - rieseguire lo stesso giorno riparte dallo stato di prima del run di quel giorno

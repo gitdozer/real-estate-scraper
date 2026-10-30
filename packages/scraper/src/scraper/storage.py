@@ -1,7 +1,7 @@
 """Storage dei dati: cartella locale (sviluppo, test) o Cloudflare R2 (produzione).
 
 Le chiavi sono percorsi con "/" (es. "observations/dt=2026-10-26/part-0.parquet"),
-uguali in locale e su R2. Layout completo in docs/dizionario-dati.md.
+uguali in locale e su R2. Layout completo in docs/data-dictionary.md.
 """
 
 import io

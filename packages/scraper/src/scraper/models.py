@@ -1,4 +1,4 @@
-"""Record dei dati raccolti. Le colonne sono documentate in docs/dizionario-dati.md."""
+"""Record dei dati raccolti. Le colonne sono documentate in docs/data-dictionary.md."""
 
 from datetime import date
 from typing import Literal
@@ -83,7 +83,7 @@ CheckOutcome = Literal["alive", "gone", "error"]
 class ListingState(BaseModel):
     """Stato corrente di un annuncio (una riga di state/listings.parquet).
 
-    Le tre date della scomparsa sono spiegate in docs/logica-scomparse.md.
+    Le tre date della scomparsa sono spiegate in docs/disappearance-logic.md.
     """
 
     source: str
