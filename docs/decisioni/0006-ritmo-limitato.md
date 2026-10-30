@@ -20,8 +20,12 @@ Diagnosi da GitHub con il comando `probe` (workflow "Diagnosi ritmo"), richieste
 
 È un **limite di frequenza**, non un tetto al numero di richieste.
 
+## Aggiornamento 2026-10-30: conta il numero di connessioni in parallelo
+
+Il primo avvio con 3 richieste/s **ma 6 connessioni in parallelo** si è bloccato di nuovo dopo ~710 richieste (minuto 4). Da lì il sito ha risposto a 3–4 richieste al minuto per oltre 2 ore, **anche dopo che il freno era sceso a una sola connessione**: l'IP resta "in penalità". La diagnosi `probe`, con **una connessione** sola, aveva fatto 2.093 richieste fino a ~3/s senza alcun timeout. Conclusione: il sito tollera ~3 richieste/s **in sequenza**; più connessioni simultanee dallo stesso IP fanno scattare una penalità di ore. Da qui `site_concurrency = 1` (e, per prudenza, `image_concurrency = 1`).
+
 ## Decisione
-- Il client HTTP rispetta un **ritmo massimo**: `site_rate_per_s = 3` verso il sito, `image_rate_per_s = 4` verso il server delle foto (limite non ancora misurato).
+- Il client HTTP usa **una sola connessione** verso il sito e verso le foto (`site_concurrency = image_concurrency = 1`) e rispetta un **ritmo massimo**: `site_rate_per_s = 3`, `image_rate_per_s = 4` (limite delle foto non ancora misurato). Con le latenze reali (0,3–0,6 s) il ritmo effettivo è ~2–3 richieste/s.
 - **Ogni tentativo fallito** (timeout, 5xx, 429) conta subito nel tasso di errori: se supera il 20%, concorrenza e ritmo si dimezzano (fino a 0,25 richieste/s), poi si apre il circuito.
 - Anche la **fase elenchi ha una scadenza** (40% del tempo massimo): le pagine non lette contano come fallite, il segmento risulta incompleto (nessuna scomparsa), ma il run si chiude e scrive quanto raccolto.
 - Log di avanzamento per fase e battito ogni minuto durante gli elenchi (richieste, in volo, latenze, codici HTTP).
@@ -31,6 +35,6 @@ Diagnosi da GitHub con il comando `probe` (workflow "Diagnosi ritmo"), richieste
 - **Eseguire dal PC dell'utente**: escluso dai vincoli del progetto.
 
 ## Conseguenze
-- Run giornaliero stimato: ~1.700 pagine elenco + ~7.000 dettagli ≈ 50 minuti, dentro i 100 minuti.
-- Primo avvio: ~35.000 dettagli ≈ 3,2 ore (budget 320 minuti); le foto mancanti si completano nei giorni seguenti.
+- Run giornaliero stimato: ~1.700 pagine elenco + ~7.000 dettagli ≈ 60 minuti, dentro i 100 minuti.
+- Primo avvio: ~35.000 dettagli ≈ 4 ore: si completa in 1–2 run grazie alle scadenze (i dettagli non scaricati restano in coda); le foto mancanti nei giorni seguenti.
 - Il ritmo si può alzare con prudenza osservando il battito nei log (timeout = troppo veloce).

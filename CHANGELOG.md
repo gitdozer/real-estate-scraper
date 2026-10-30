@@ -4,6 +4,9 @@ Modifiche per componente. Versioni [SemVer](https://semver.org/lang/it/), tag `<
 
 ## scraper
 
+### 0.1.2 — 2026-10-30
+- Una sola connessione verso il sito e verso le foto: con più connessioni in parallelo, da GitHub il sito mette l'IP in penalità per ore (aggiornamento della decisione 0006).
+
 ### 0.1.1 — 2026-10-29
 - Ritmo limitato verso il sito (3 richieste/s) e le foto (4/s): da GitHub il sito lascia appese le richieste oltre ~3/s (diagnosi in `docs/decisioni/0006`).
 - Il freno conta ogni tentativo fallito e dimezza anche il ritmo; scadenza anche per la fase elenchi.

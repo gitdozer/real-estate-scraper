@@ -2,8 +2,8 @@
 # Ogni valore può essere sovrascritto da riga di comando (vedi docs/runbook.md).
 
 # --- Rete ---
-site_concurrency: 6          # richieste contemporanee verso il sito degli annunci
-image_concurrency: 8         # richieste contemporanee verso il server delle foto
+site_concurrency: 1          # connessioni contemporanee verso il sito. 1: da GitHub, con più connessioni in parallelo il sito mette l'IP in penalità per ore (decisione 0006)
+image_concurrency: 1         # connessioni contemporanee verso il server delle foto (prudenza, vedi sopra)
 site_rate_per_s: 3.0         # ritmo massimo verso il sito (richieste/s). Da GitHub il sito tollera ~3/s; a ~12/s rallenta tutto (diagnosi 2026-10-29). 0 = nessun limite
 image_rate_per_s: 4.0        # ritmo massimo verso il server delle foto (richieste/s)
 max_retries: 4               # tentativi massimi per richiesta (errori di rete, 5xx, 429)

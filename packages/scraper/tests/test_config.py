@@ -32,7 +32,8 @@ def test_settings_overrides_win():
 
 def test_settings_file_matches_defaults():
     s = load_settings(REPO / "config/settings.yaml", {})
-    assert s.site_concurrency == 6 and s.image_concurrency == 8 and s.max_retries == 4
+    # una sola connessione: con più connessioni in parallelo da GitHub il sito mette l IP in penalità (decisione 0006)
+    assert s.site_concurrency == 1 and s.image_concurrency == 1 and s.max_retries == 4
     assert s.completeness_min == 0.97 and s.photos_new == 6 and s.photos_backlog == 3
 
 

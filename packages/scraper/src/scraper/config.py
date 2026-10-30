@@ -21,8 +21,8 @@ class City(BaseModel):
 class Settings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    site_concurrency: int = Field(6, gt=0)
-    image_concurrency: int = Field(8, gt=0)
+    site_concurrency: int = Field(1, gt=0)
+    image_concurrency: int = Field(1, gt=0)
     site_rate_per_s: float = Field(3.0, ge=0)
     image_rate_per_s: float = Field(4.0, ge=0)
     max_retries: int = Field(4, gt=0)

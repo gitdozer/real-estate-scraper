@@ -46,8 +46,8 @@ Client: `http.Fetcher` (httpx asincrono), header da browser reale, compressione 
 
 | Parametro (`config/settings.yaml`) | Default | Effetto |
 |---|---|---|
-| `site_concurrency` | 6 | richieste contemporanee verso trovacasa.it |
-| `image_concurrency` | 8 | richieste contemporanee verso il server delle foto (host diverso) |
+| `site_concurrency` | 1 | connessioni contemporanee verso trovacasa.it. **Una sola**: da GitHub, con più connessioni in parallelo il sito mette l'IP in penalità per ore |
+| `image_concurrency` | 1 | connessioni contemporanee verso il server delle foto (host diverso) |
 | `site_rate_per_s` | 3 | **ritmo massimo** verso il sito (richieste/s): tra l'inizio di due richieste passano almeno 1/3 s. Da GitHub il sito tollera ~3/s, a ~12/s lascia appese le richieste — vedi [decisioni/0006](decisioni/0006-ritmo-limitato.md) |
 | `image_rate_per_s` | 4 | ritmo massimo verso il server delle foto |
 | `max_retries` | 4 | tentativi massimi per richiesta |

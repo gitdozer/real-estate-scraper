@@ -77,7 +77,7 @@ Annunci al 2026-10-25:
 
 Velocità (da rete domestica, pagine elenco di Milano): 1 connessione → 2,5 richieste/s; 4 → 11; 8 → 20; 16 → 31; nessun errore su 710 richieste. Con 16 connessioni la latenza mediana sale da 0,35 a 0,46 s: il server inizia a soffrire.
 
-**Da GitHub Actions (IP di datacenter) il limite è molto più basso** (2026-10-29): a ~12 richieste/s, dopo ~750 richieste nel primo minuto il sito lascia appese quasi tutte le richieste (timeout di 30 s, nessun 403/429) e ne serve solo 8–20 al minuto. A 1, 2 e ~3 richieste/s: 2.093 richieste, 0 timeout. Default scelto: **3 richieste/s** con 6 connessioni — vedi [decisioni/0006](../decisioni/0006-ritmo-limitato.md). Per rimisurare: workflow **Diagnosi ritmo** (`python -m scraper probe`).
+**Da GitHub Actions (IP di datacenter) il limite è molto più basso** (2026-10-29): a ~12 richieste/s, dopo ~750 richieste nel primo minuto il sito lascia appese quasi tutte le richieste (timeout di 30 s, nessun 403/429) e ne serve solo 8–20 al minuto. A 1, 2 e ~3 richieste/s: 2.093 richieste, 0 timeout. Il 2026-10-30 è emerso che conta soprattutto il **parallelismo**: con 6 connessioni a 3 richieste/s l'IP finisce in penalità dopo ~710 richieste (poi 3–4 risposte al minuto per ore, anche scendendo a una connessione); con una connessione sola 2.093 richieste senza problemi. Default scelto: **1 connessione, al massimo 3 richieste/s** — vedi [decisioni/0006](../decisioni/0006-ritmo-limitato.md). Per rimisurare: workflow **Diagnosi ritmo** (`python -m scraper probe`).
 
 ## Prove reali della pipeline
 
