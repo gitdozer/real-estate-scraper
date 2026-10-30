@@ -122,3 +122,20 @@ async def test_get_many_preserves_order():
     f, _ = make(handler)
     results = await f.get_many([f"https://www.trovacasa.it/x?n={i}" for i in range(15)])
     assert [r.text for r in results] == [str(i) for i in range(15)]
+
+
+async def test_retries_stop_at_deadline():
+    # Run of 2026-10-30: the search-results deadline (40% of the runtime) did not stop
+    # retries already under way, and the phase lasted 188 minutes instead of 128.
+    now = [0.0]
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        now[0] += 30.0  # each attempt hangs until the 30 s timeout
+        raise httpx.ReadTimeout("hang", request=request)
+
+    f = Fetcher(1, Settings(max_retries=4), transport=httpx.MockTransport(handler), sleep=FakeSleep(), clock=lambda: now[0])
+    results = await f.get_many(["https://www.trovacasa.it/a"], deadline=10.0)
+    assert len(calls) == 1  # first attempt started before the deadline, no retry after it
+    assert results[0] is not None and not results[0].ok  # attempted and failed: not "skipped"

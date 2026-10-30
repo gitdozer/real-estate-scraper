@@ -13,7 +13,9 @@ Regole:
   anche se un tentativo successivo riesce: un sito che rallenta va assecondato subito.
   Se nelle ultime `error_window` richieste i fallimenti superano `error_threshold`,
   concorrenza e ritmo si dimezzano; quando sono già al minimo si apre il circuito
-  (CircuitOpen) e il run si ferma in modo pulito.
+  (CircuitOpen) e il run si ferma in modo pulito;
+- the deadline of `get_many` also stops retries: a request whose first attempt started
+  before the deadline is not retried after it, and counts as failed.
 """
 
 import asyncio
@@ -59,7 +61,14 @@ class FetchResult:
 
 
 class CircuitOpen(Exception):
-    """Troppi errori anche a concorrenza 1: il sito è in difficoltà o ci sta bloccando."""
+    """Troppi errori anche a concorrenza 1: il sito è in difficoltà o ci sta bloccando.
+
+    Raised by `get_many`, `partial` holds the results obtained before the circuit opened,
+    in the order of the URLs (None = not completed), so that pages already read are kept."""
+
+    def __init__(self, *args, partial: list["FetchResult | None"] | None = None):
+        super().__init__(*args)
+        self.partial = partial
 
 
 class Fetcher:
@@ -208,6 +217,8 @@ class Fetcher:
                             attempts=attempt,
                         )
             self._record(failed=True)  # ogni tentativo fallito conta, anche se il prossimo riesce
+            if deadline is not None and self._clock() >= deadline:
+                break  # past the deadline no retries: the request counts as failed (not as skipped)
             if attempt < self._settings.max_retries:
                 self._counts["retries"] += 1
                 wait = min(_MAX_BACKOFF_S, retry_after) if retry_after is not None else min(_MAX_BACKOFF_S, 2.0**attempt) + random.uniform(0, 1)
@@ -220,11 +231,12 @@ class Fetcher:
         tasks = [asyncio.ensure_future(self._get(u, binary, deadline)) for u in urls]
         try:
             return list(await asyncio.gather(*tasks))
-        except CircuitOpen:
+        except CircuitOpen as exc:
             for t in tasks:
                 t.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
-            raise
+            partial = [t.result() if t.done() and not t.cancelled() and t.exception() is None else None for t in tasks]
+            raise CircuitOpen(*exc.args, partial=partial) from exc
 
 
 def _parse_retry_after(value: str | None) -> float | None:

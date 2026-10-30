@@ -148,8 +148,11 @@ async def _for_each_chunk(
         chunk = items[i : i + CHUNK]
         try:
             results = await fetcher.get_many([url_of(x) for x in chunk], binary=binary, deadline=deadline)
-        except CircuitOpen:
-            for x in items[i:]:
+        except CircuitOpen as exc:
+            # the requests of the chunk completed before the circuit opened are kept
+            for x, r in zip(chunk, exc.partial or [None] * len(chunk)):
+                handle(x, r)
+            for x in items[i + CHUNK :]:
                 handle(x, None)
             return True
         for x, r in zip(chunk, results):
@@ -192,14 +195,16 @@ async def _scrape_segment(fetcher: Fetcher, seg: SegmentKey, settings: Settings,
         last = min(last, settings.max_pages)
     pages = list(range(2, last + 1))
     cards, failed = list(page1.cards), 0
+    circuit = False
     try:
         results = await fetcher.get_many([TROVACASA.list_url(slug, contract, p) for p in pages], deadline=deadline)
-    except CircuitOpen:
-        # si tengono le schede della pagina 1; il segmento risulta incompleto
-        return SegmentResult(seg, cards, declared, len(pages) + 1, max(1, len(pages)), circuit=True, skipped_cards=skipped)
+    except CircuitOpen as exc:
+        # the pages read before the circuit opened are kept; the segment stays incomplete
+        circuit = True
+        results = exc.partial or [None] * len(pages)
     for p, r in zip(pages, results):
         if r is None:
-            failed += 1  # non letta: tempo per gli elenchi scaduto
+            failed += 1  # non letta: tempo per gli elenchi scaduto o circuito aperto
             continue
         if r.ok:
             try:
@@ -214,7 +219,9 @@ async def _scrape_segment(fetcher: Fetcher, seg: SegmentKey, settings: Settings,
             continue  # fine dell'elenco (l'ultima pagina può sparire se intanto calano gli annunci)
         else:
             failed += 1  # anche un 404 in mezzo all'elenco: mancherebbero 24 annunci
-    return SegmentResult(seg, cards, declared, len(pages) + 1, failed, skipped_cards=skipped)
+    if circuit:
+        failed = max(failed, 1)  # a segment interrupted by the circuit is never complete (no disappearances)
+    return SegmentResult(seg, cards, declared, len(pages) + 1, failed, circuit=circuit, skipped_cards=skipped)
 
 
 def _observation_rows(cards: dict[ListingKey, Card], run_date: date) -> list[dict]:

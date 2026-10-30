@@ -136,3 +136,18 @@ async def test_partial_rerun_listing_moved_segment_not_lost(site, storage):
     await run(site, storage, D2, cities=(MILANO, MONZA), only=["milano"])
     s = st(storage)[("trovacasa", "101")]
     assert s.status == "active" and s.first_seen == D1 and s.city == "milano"
+
+
+async def test_circuit_open_keeps_pages_already_read_and_records_no_disappearances(site, storage):
+    # Run of 2026-10-30: when the circuit opened, the pages of the segment already read
+    # were thrown away and only page 1 was kept.
+    site.listings[("milano", "vendita")] = [str(i) for i in range(1, 81)]  # 4 pages
+    await run(site, storage, D1)
+    site.listings[("milano", "vendita")].remove("75")  # on page 4, which will not be read
+    site.failing_pages.add(("milano", "vendita", 3))
+    report = await run(site, storage, D2, settings=Settings(max_retries=1, error_window=1, site_concurrency=1, site_rate_per_s=0))
+    assert "circuit_open_lists" in report["alerts"]
+    assert all(s.status == "active" for s in st(storage).values())
+    from scraper.storage import partition_key, read_parquet
+
+    assert len(read_parquet(storage, partition_key("observations", D2))) == 48  # pages 1 and 2

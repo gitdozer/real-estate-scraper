@@ -79,6 +79,16 @@ Speed (from a home connection, Milan result pages): 1 connection → 2.5 request
 
 **From GitHub Actions (a datacenter IP) the limit is much lower** (2026-10-29): at ~12 requests/s, after ~750 requests in the first minute the site leaves almost all requests hanging (30 s timeouts, no 403/429) and serves only 8–20 per minute. At 1, 2 and ~3 requests/s: 2,093 requests, 0 timeouts. On 2026-10-30 it became clear that what matters most is **parallelism**: with 6 connections at 3 requests/s the IP gets penalised after ~710 requests (then 3–4 responses per minute for hours, even after dropping to a single connection); with a single connection, 2,093 requests went through without problems. **Correction (2026-10-30, run 41024689477):** with a single connection at ~2.4 requests/s the run stalled again after ~760 requests (6 minutes). All three stalled runs stopped at 710–760 requests whatever the rate, and the 2,093 "successful" probe requests repeated the same 798 URLs (cache hits). The limit therefore looks like a **volume of distinct pages per IP**, not a rate; being measured again with a probe that never repeats a URL. Current default: **1 connection, at most 3 requests/s** — see [decisions/0006](../decisions/0006-rate-limiting.md). To measure again: the **Diagnosi ritmo** workflow (`python -m scraper probe`).
 
+## Map endpoint (future option, not used)
+
+The search-results page has a map view that loads, in a single request, `GET /ricerca/geojson?cacheKey=/case-in-vendita/<city>`: a GeoJSON with one point per listing. Checked by hand on 2026-10-30 (Milano sale, a response saved from the browser, ~12 MB):
+
+- 16,129 listings against 17,470 declared (92%): probably the listings without coordinates are missing;
+- per listing: `id` (same as our `listing_id`), coordinates (mostly 4 decimals), `prezzodescr`, `mqdescr`, `nrlocalidescr`, `tipodescr`, `titolo`, `urlanteprima` (cover photo) as display text; no address, bathrooms, energy class, agency or tags;
+- clicking a point calls `GET /immobile/json?idlist=<id>&codCache=<…>` (title, price, floor area, rooms, URLs).
+
+It could replace most of the search-result requests (1 request per segment instead of hundreds), but it **cannot be the basis for disappearances**: the ~8% of listings missing from the map would look gone every day. Kept as an option for later (decision of 2026-10-30); not implemented.
+
 ## Real pipeline test runs
 
 | Date | Where | Scope | Result |
