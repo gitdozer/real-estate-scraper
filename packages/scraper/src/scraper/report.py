@@ -39,10 +39,12 @@ def summary_markdown(report: dict) -> str:
         f"**Foto:** pianificate {p.get('planned', 0)} · impronte {p.get('done', 0)} · fallite {p.get('failed', 0)}"
         f" · oltre la scadenza {p.get('skipped_deadline', 0)}",
     ]
-    site = report.get("fetch", {}).get("site")
-    if site:
-        lines += ["", f"**Richieste al sito:** {site['requests']} · ritentate {site['retries']} · fallite {site['failures']} · concorrenza finale {site['concurrency_now']}"]
-        lines += ["", f"**Codici HTTP:** {_counts(site.get('by_status', {}))}"]  # es. 403 = il sito ci sta bloccando
+    # "site" = reports written before 0.1.4, when lists and details shared one client
+    for key, label in (("lists", "elenchi"), ("details", "dettagli"), ("site", "al sito")):
+        stats = report.get("fetch", {}).get(key)
+        if stats:
+            lines += ["", f"**Richieste {label}:** {stats['requests']} · ritentate {stats['retries']} · fallite {stats['failures']} · concorrenza finale {stats['concurrency_now']}"]
+            lines += ["", f"**Codici HTTP {label}:** {_counts(stats.get('by_status', {}))}"]  # es. 403 = il sito ci sta bloccando
     if report["alerts"]:
         lines += ["", f"**⚠️ Avvisi:** {', '.join(report['alerts'])} — vedi docs/runbook.md"]
     return "\n".join(lines) + "\n"

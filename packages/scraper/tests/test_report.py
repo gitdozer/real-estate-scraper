@@ -32,3 +32,14 @@ def test_summary_has_aggregates():
 def test_summary_contains_no_listing_data():
     md = summary_markdown(REPORT)
     assert "trovacasa.it/annunci" not in md and "73623446" not in md and "http" not in md
+
+
+def test_summary_shows_list_and_detail_requests_separately():
+    report = dict(REPORT)
+    report["fetch"] = {
+        "lists": {"requests": 1700, "retries": 2, "failures": 0, "by_status": {"200": 1700}, "concurrency_now": 1},
+        "details": {"requests": 5400, "retries": 9, "failures": 1, "by_status": {"200": 5300, "404": 100}, "concurrency_now": 2},
+    }
+    md = summary_markdown(report)
+    assert "**Richieste elenchi:** 1700" in md and "**Richieste dettagli:** 5400" in md
+    assert "404: 100" in md

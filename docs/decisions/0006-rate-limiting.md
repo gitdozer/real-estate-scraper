@@ -1,6 +1,6 @@
 # 0006 — Limited request rate towards the site (~3 requests per second)
 
-Date: 2026-10-29 · Status: accepted (rate revised to 0.5 requests/s on 2026-10-30)
+Date: 2026-10-29 · Status: accepted, revised on 2026-10-31 (scraper 0.1.4: separate paces for search results and detail pages, no page past the last one). The sections below keep the history of the diagnosis, including the hypotheses that turned out wrong.
 
 ## Context
 The first launch on GitHub Actions (27 October) and the runs on the following days were all cancelled by the job time limit (350 minutes, then 120) without writing anything. The progress logs showed that the run was stuck in the **search-results phase**:
@@ -58,17 +58,26 @@ A log of the old scraper (GitHub Actions, Azure westus, 2026-10-06) shows: 714 s
 
 **New hypothesis:** requesting a search-result page that does not exist (404) makes the site penalise the IP (about half of the following requests hang for hours). Test: `probe --kind list --first-page 600`, which reaches the 404 pages of Milano rent (past page ~646) while the Milano sale pages are still valid (up to ~728); if those valid pages start timing out right after the first 404s, the hypothesis is confirmed.
 
-## Decision
-- The HTTP client uses **a single connection** to the site and to the photo host (`site_concurrency = image_concurrency = 1`) and respects a **maximum request rate**: `site_rate_per_s = 3`, `image_rate_per_s = 4` (the photo limit has not been measured yet). With real latencies (0.3–0.6 s) the effective rate is ~2–3 requests/s.
-- **Every failed attempt** (timeout, 5xx, 429) counts immediately towards the error rate: if it exceeds 20%, concurrency and rate are halved (down to 0.25 requests/s), and then the circuit breaker opens.
-- The **search-results phase also has a deadline** (40% of the maximum run time): pages not yet read count as failed and the segment is marked incomplete (so no disappearances are recorded), but the run finishes and writes whatever it collected.
-- Progress logs per phase, plus a heartbeat every minute during the search-results phase (requests, in flight, latencies, HTTP status codes).
+### Result of the 404 test (run 41191253281, 2026-10-31)
+
+At 0.5 req/s from search-result page 600: from minute 3 to 9 the valid Milano sale pages kept answering **while** 404s on Milano rent were interleaved; from minute 9 to 15, 285 pages past the end answered 404 promptly; the stall came only at minute ~15, after ~450 requests, almost all on deep or non-existent pages. So a single 404 does not trigger the penalty. The picture that fits **all** the data: the site weighs search-result pages by their cost for the server (deep pages and pages past the end are expensive, detail pages cheap) and penalises the IP when the cost accumulated over time crosses a threshold. The old scraper stayed below it by reading search results at 0.30 req/s and never requesting a page past the end. After four hypotheses (rate, parallel connections, 404, cost), we stop guessing and copy the behaviour that has been **shown to work**.
+
+## Decision (scraper 0.1.4, 2026-10-31)
+- **Search-result pages** like the old scraper: **one connection at 0.3 requests/s** (`list_concurrency = 1`, `list_rate_per_s = 0.3`), and **never a page past the last one**: pages 2…`ceil(declared/24)`, then the pager's "next" link is followed (at most 5 extra pages) to reach listings shifted during the collection. A page that was not read never leads further.
+- **Detail pages** with their own client: **2 connections at 1.5 requests/s** (`detail_concurrency = 2`, `detail_rate_per_s = 1.5`), the pace measured on 2026-10-30 (3,985 pages, 0 errors); the old scraper went faster (~2.9/s with 4 connections).
+- Photos: one connection at 4 requests/s (separate host, limit not measured yet).
+- **Every failed attempt** (timeout, 5xx, 429) counts towards the error rate: above 20%, concurrency and rate are halved (down to 0.25 requests/s), then the circuit breaker opens; pages already read are kept, and an interrupted segment never records disappearances.
+- The **search-results phase has a deadline** (40% of the maximum run time), which also stops retries.
+- Progress logs per phase, a heartbeat every minute during the search-results phase, and separate request statistics for search results and detail pages in the summary.
+
+*Earlier decisions, superseded:* 3 req/s with 6 connections (2026-10-29); one connection at 3 req/s (2026-10-30, "parallel connections" hypothesis); 0.5 req/s for every page (2026-10-30, "volume per IP" hypothesis).
 
 ## Alternatives considered
 - **IP rotation or proxies** to get around the limit: that would be circumventing a protection put in place by the site (rule 5 in CLAUDE.md).
 - **Running from the user's PC**: ruled out by the project constraints.
 
 ## Consequences
-- *(Superseded by the revision of 2026-10-30.)* At 0.5 requests/s: ~1,700 result pages ≈ 1 hour, then ~7,000–8,000 detail pages in the remaining ~3.5 hours; the daily run lasts ~5.5 hours, within the 350-minute job limit. That covers the 7-day rotation (~5,000 a day) plus the new listings.
-- Bootstrap: the ~20,000 listings still without a detail page are worked off over ~3 days (the queue carries over); the missing photos follow.
-- The rate can be raised cautiously by watching the heartbeat in the logs (timeouts = too fast).
+- Daily run (estimate): ~1,700 search-result pages at 0.3/s ≈ 95 minutes, then ~5,400 detail pages at 1.5/s ≈ 60 minutes, then photos: **~2.5–3 hours**, within the 330-minute budget.
+- Bootstrap: ~35,000 detail pages ≈ 6.5 hours, i.e. **~2 nights** (the queue carries over).
+- Not yet proven: ~1,700 search-result pages at 0.3/s in one run (the old scraper read 714). The other municipalities have few, shallow pages. The nightly run is the test; the heartbeat shows it if the site starts hanging.
+- Raising the paces later: only one at a time, after a 45-minute probe that holds.

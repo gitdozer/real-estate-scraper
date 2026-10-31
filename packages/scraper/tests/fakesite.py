@@ -39,9 +39,12 @@ def card_html(
 </div>"""
 
 
-def list_page_html(cards: list[str], declared_total: int | None, contract: str = "vendita", city: str = "Milano") -> str:
+def list_page_html(
+    cards: list[str], declared_total: int | None, contract: str = "vendita", city: str = "Milano", next_page: int | None = None
+) -> str:
     total = "" if declared_total is None else f"<h1>{declared_total:,}".replace(",", ".") + f" case in {contract} a {city}</h1>"
-    return f"<html><body>{total}<div class='immobileListing'>{''.join(cards)}</div></body></html>"
+    pager = "" if next_page is None else f'<a href="?page={next_page}" class="pager__link big next" data-text="SUCCESSIVO">'
+    return f"<html><body>{total}<div class='immobileListing'>{''.join(cards)}</div>{pager}</body></html>"
 
 
 def detail_html(listing_id: str, price: str = "250.000 &#x20AC;", description: str = "Bel trilocale luminoso", contract: str = "Vendita") -> str:
@@ -131,7 +134,9 @@ class FakeSite:
                 card_html(i, price=self.prices.get(i, "250.000 &#x20AC;"), photo_ids=(f"A_1_{i}_1", f"A_1_{i}_2"), advertiser="1")
                 for i in ids
             ]
-            return httpx.Response(200, text=list_page_html(cards, declared, contract, CITY_NAMES.get(slug, slug)))
+            more = len(self.listings.get((slug, contract), [])) > page * 24  # like the real pager
+            html = list_page_html(cards, declared, contract, CITY_NAMES.get(slug, slug), next_page=page + 1 if more else None)
+            return httpx.Response(200, text=html)
         if parts[0] == "annunci":
             listing_id = parts[1].rsplit("-", 1)[-1]
             visible = any(listing_id in ids for ids in self.listings.values())

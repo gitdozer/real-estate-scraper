@@ -32,8 +32,10 @@ def test_settings_overrides_win():
 
 def test_settings_file_matches_defaults():
     s = load_settings(REPO / "config/settings.yaml", {})
-    # una sola connessione: con più connessioni in parallelo da GitHub il sito mette l IP in penalità (decisione 0006)
-    assert s.site_concurrency == 1 and s.image_concurrency == 1 and s.max_retries == 4
+    # search-result pages: one connection at 0.3 req/s, like the old scraper; detail pages: 2 connections at 1.5 req/s (decision 0006)
+    assert s.list_concurrency == 1 and s.list_rate_per_s == 0.3
+    assert s.detail_concurrency == 2 and s.detail_rate_per_s == 1.5
+    assert s.image_concurrency == 1 and s.max_retries == 4
     assert s.completeness_min == 0.97 and s.photos_new == 6 and s.photos_backlog == 3
 
 

@@ -4,7 +4,10 @@ Changes per component. Versions follow [SemVer](https://semver.org/), with tags 
 
 ## scraper
 
-### Unreleased
+### 0.1.4 — 2026-10-31
+- Search-result pages at **0.3 requests/s** with one connection, like the old scraper, and **never a page past the last one**: the pager's "next" link is followed (at most 5 extra pages) for listings shifted during the collection.
+- Detail pages on their own client: **2 connections at 1.5 requests/s** (measured: 3,985 pages in 45 minutes without errors).
+- New settings `list_concurrency`, `list_rate_per_s`, `detail_concurrency`, `detail_rate_per_s` replace `site_concurrency` and `site_rate_per_s`; the summary shows search-result and detail requests separately.
 - `probe --first-page N` (list kind) and the matching workflow input.
 - `probe --kind detail`: collects distinct detail-page URLs from search-result pages read at 0.5 req/s, then probes them; `--concurrency` connections share one rate. The "Diagnosi ritmo" workflow has the matching inputs and a 75-minute limit.
 

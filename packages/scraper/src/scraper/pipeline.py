@@ -47,6 +47,7 @@ SEGMENTS_KEY = "state/segments.parquet"
 CENSOR_WINDOW_DAYS = 7  # annunci "nuovi" nei primi giorni di un segmento: probabilmente già online prima
 RAW_GONE_SAMPLES = 50  # pagine di controlli 404/redirect conservate per capire come il sito mostra un annuncio rimosso
 LIST_SHARE = 0.40  # quota del tempo massimo per gli elenchi: oltre, le pagine non lette contano come fallite
+MAX_EXTRA_PAGES = 5  # pages followed through "next" links past the declared total (listings shifted during the run)
 CHUNK = 500  # richieste per blocco: un'interruzione (scadenza, circuito) non fa perdere i blocchi già fatti
 _CHECK_REASONS = ("absence_check", "delisted_recheck")
 _RAW_REASONS = ("new", "changed", "never_detailed")
@@ -190,38 +191,58 @@ async def _scrape_segment(fetcher: Fetcher, seg: SegmentKey, settings: Settings,
     declared = page1.declared_total
     skipped = page1.skipped_cards
     n_pages = max(1, math.ceil((declared or 0) / TROVACASA.page_size))
-    last = n_pages + 1  # una pagina in più: gli annunci nuovi fanno slittare gli altri durante la raccolta
-    if settings.max_pages > 0:
-        last = min(last, settings.max_pages)
+    # Never request a page past the last one: the old scraper followed the pager and never did,
+    # and every stall of ours came right after such a request (decision 0006). Listings shifted
+    # during the collection are reached through the last page's "next" link instead.
+    last = n_pages if settings.max_pages <= 0 else min(n_pages, settings.max_pages)
     pages = list(range(2, last + 1))
     cards, failed = list(page1.cards), 0
     circuit = False
-    try:
-        results = await fetcher.get_many([TROVACASA.list_url(slug, contract, p) for p in pages], deadline=deadline)
-    except CircuitOpen as exc:
-        # the pages read before the circuit opened are kept; the segment stays incomplete
-        circuit = True
-        results = exc.partial or [None] * len(pages)
-    for p, r in zip(pages, results):
+    has_next = page1.has_next  # "next" link of the last page read so far
+
+    async def fetch(batch: list[int]) -> list:
+        nonlocal circuit
+        try:
+            return await fetcher.get_many([TROVACASA.list_url(slug, contract, p) for p in batch], deadline=deadline)
+        except CircuitOpen as exc:
+            # the pages read before the circuit opened are kept; the segment stays incomplete
+            circuit = True
+            return exc.partial or [None] * len(batch)
+
+    def handle(p: int, r) -> None:
+        nonlocal failed, skipped, has_next
+        has_next = False  # only a page actually read can lead further (never guess past the end)
         if r is None:
             failed += 1  # non letta: tempo per gli elenchi scaduto o circuito aperto
-            continue
+            return
         if r.ok:
             try:
                 page = TROVACASA.parse_list_page(r.text, slug, contract, p)
             except Exception:
                 log.warning("pagina elenco non interpretabile (%s/%s, pagina %s)", slug, contract, p)
                 failed += 1
-                continue
+                return
             cards.extend(page.cards)
             skipped += page.skipped_cards
+            has_next = page.has_next
         elif r.status == 404 and r.error is None and p >= n_pages:
-            continue  # fine dell'elenco (l'ultima pagina può sparire se intanto calano gli annunci)
+            has_next = False  # fine dell'elenco (l'ultima pagina può sparire se intanto calano gli annunci)
         else:
             failed += 1  # anche un 404 in mezzo all'elenco: mancherebbero 24 annunci
+
+    for p, r in zip(pages, await fetch(pages)):
+        handle(p, r)
+    requested = len(pages) + 1
+    extra = 0
+    while has_next and not circuit and settings.max_pages <= 0 and extra < MAX_EXTRA_PAGES:
+        nxt = last + extra + 1
+        has_next = False
+        handle(nxt, (await fetch([nxt]))[0])
+        extra += 1
+        requested += 1
     if circuit:
         failed = max(failed, 1)  # a segment interrupted by the circuit is never complete (no disappearances)
-    return SegmentResult(seg, cards, declared, len(pages) + 1, failed, circuit=circuit, skipped_cards=skipped)
+    return SegmentResult(seg, cards, declared, requested, failed, circuit=circuit, skipped_cards=skipped)
 
 
 def _observation_rows(cards: dict[ListingKey, Card], run_date: date) -> list[dict]:
@@ -296,7 +317,12 @@ async def run_daily(
 
     log.info("[avvio] %d segmenti, %d annunci nello stato, rerun=%s", len(segments), len(current), rerun)
 
-    site = Fetcher(settings.site_concurrency, settings, rate_per_s=settings.site_rate_per_s, transport=transport, clock=clock, sleep=sleep)
+    # Search-result and detail pages get separate clients and paces: the site limits search
+    # results far more than detail pages (decision 0006).
+    site = Fetcher(settings.list_concurrency, settings, rate_per_s=settings.list_rate_per_s, transport=transport, clock=clock, sleep=sleep)
+    detail_site = Fetcher(
+        settings.detail_concurrency, settings, rate_per_s=settings.detail_rate_per_s, transport=transport, clock=clock, sleep=sleep
+    )
     images = Fetcher(settings.image_concurrency, settings, rate_per_s=settings.image_rate_per_s, transport=transport, clock=clock, sleep=sleep)
     circuit = False
     try:
@@ -409,7 +435,7 @@ async def run_daily(
                     error_samples.append(dict(url=t.url, status=r.status, error=r.error))
 
         log.info("[dettagli] pianificati %d (%.1f min)", len(tasks), minutes())
-        if await _for_each_chunk(site, tasks, lambda t: t.url, False, detail_deadline, handle_detail, progress_of("dettagli")):
+        if await _for_each_chunk(detail_site, tasks, lambda t: t.url, False, detail_deadline, handle_detail, progress_of("dettagli")):
             circuit = True
             alerts.append("circuit_open_details")
         attempted = len(tasks) - dstats["skipped_deadline"]
@@ -455,6 +481,7 @@ async def run_daily(
             new_state[key] = new_state[key].model_copy(update=dict(photos_done=n, photo_ids_hash=photo_ids_hash(cards[key].photo_ids)))
     finally:
         await site.aclose()
+        await detail_site.aclose()
         await images.aclose()
 
     # 6. registro dei segmenti, allarmi
@@ -494,7 +521,7 @@ async def run_daily(
         photos=dict(planned=len(ptasks), **pstats),
         events=dict(Counter(e.type for e in events)),
         active=dict(prev=prev_n, now=now_n),
-        fetch=dict(site=site.stats, images=images.stats),
+        fetch=dict(lists=site.stats, details=detail_site.stats, images=images.stats),
         alerts=alerts,
         error_samples=error_samples,
         exit_code=exit_code,

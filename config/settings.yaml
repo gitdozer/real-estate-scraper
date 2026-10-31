@@ -2,9 +2,11 @@
 # Ogni valore può essere sovrascritto da riga di comando (vedi docs/runbook.md).
 
 # --- Rete ---
-site_concurrency: 1          # connessioni contemporanee verso il sito. 1: da GitHub, con più connessioni in parallelo il sito mette l'IP in penalità per ore (decisione 0006)
+list_concurrency: 1          # connections for search-result pages: they are the ones the site limits (decision 0006)
+list_rate_per_s: 0.3         # search-result pages per second: the old scraper's proven pace (0.5/s stalled after ~750 pages)
+detail_concurrency: 2        # connections for detail pages
+detail_rate_per_s: 1.5       # detail pages per second: 3,985 pages in 45 minutes without errors at this pace (probe of 2026-10-30)
 image_concurrency: 1         # connessioni contemporanee verso il server delle foto (prudenza, vedi sopra)
-site_rate_per_s: 0.5         # maximum request rate to the site (requests/s). From GitHub 0.5/s held for 1,303 distinct pages; ~2.4/s stalls after ~750 (decision 0006). 0 = no limit
 image_rate_per_s: 4.0        # ritmo massimo verso il server delle foto (richieste/s)
 max_retries: 4               # tentativi massimi per richiesta (errori di rete, 5xx, 429)
 timeout_s: 30.0              # timeout di una singola richiesta, in secondi

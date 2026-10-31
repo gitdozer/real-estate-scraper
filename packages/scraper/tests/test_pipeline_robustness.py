@@ -113,10 +113,11 @@ async def test_changed_listing_without_detail_keeps_trigger(site, storage):
 
 
 async def test_circuit_open_in_list_phase_no_disappearances(site, storage):
+    site.listings[("milano", "vendita")] = [str(i) for i in range(1, 73)]  # 3 pages: page 3 is requested after page 2 fails
     await run(site, storage, D1)
     site.listings[("milano", "vendita")].remove("5")
     site.failing_pages.update(("milano", "vendita", p) for p in (2, 3))
-    report = await run(site, storage, D2, settings=Settings(max_retries=1, error_window=1, site_concurrency=1, site_rate_per_s=0))
+    report = await run(site, storage, D2, settings=Settings(max_retries=1, error_window=1, list_concurrency=1, list_rate_per_s=0))
     assert report["exit_code"] == 1 and "circuit_open_lists" in report["alerts"]
     assert all(s.status == "active" for s in st(storage).values())
     # la pagina 1 era stata letta: le sue 24 osservazioni non vanno perse
@@ -145,9 +146,75 @@ async def test_circuit_open_keeps_pages_already_read_and_records_no_disappearanc
     await run(site, storage, D1)
     site.listings[("milano", "vendita")].remove("75")  # on page 4, which will not be read
     site.failing_pages.add(("milano", "vendita", 3))
-    report = await run(site, storage, D2, settings=Settings(max_retries=1, error_window=1, site_concurrency=1, site_rate_per_s=0))
+    report = await run(site, storage, D2, settings=Settings(max_retries=1, error_window=1, list_concurrency=1, list_rate_per_s=0))
     assert "circuit_open_lists" in report["alerts"]
     assert all(s.status == "active" for s in st(storage).values())
     from scraper.storage import partition_key, read_parquet
 
     assert len(read_parquet(storage, partition_key("observations", D2))) == 48  # pages 1 and 2
+
+
+async def test_never_requests_a_page_past_the_last_one(site, storage):
+    # 30 listings = 2 pages: page 3 does not exist and must never be requested (decision 0006).
+    report = await run(site, storage, D1)
+    assert report["exit_code"] == 0
+    assert not [u for u in site.requests if "case-in-vendita/milano?page=3" in u]
+
+
+async def test_follows_the_next_link_when_listings_shift(site, storage):
+    # The site declares 30 listings (2 pages) but 50 are shown: page 2 links to page 3.
+    site.listings[("milano", "vendita")] = [str(i) for i in range(1, 51)]
+    site.declared_override[("milano", "vendita")] = 30
+    await run(site, storage, D1)
+    from scraper.storage import partition_key, read_parquet
+
+    assert len(read_parquet(storage, partition_key("observations", D1))) == 50
+    assert not [u for u in site.requests if "case-in-vendita/milano?page=4" in u]
+
+
+async def test_list_and_detail_pages_have_separate_rates(site, storage):
+    from scraper.pipeline import RunOptions, run_daily
+
+    now = [0.0]
+    starts: list[tuple[float, str]] = []
+
+    async def sleep(seconds):
+        now[0] += seconds
+
+    def handler(request):
+        starts.append((now[0], str(request.url)))
+        return site.handler(request)
+
+    import httpx
+
+    settings = Settings(max_retries=1, list_rate_per_s=0.3, detail_rate_per_s=1.5, detail_concurrency=2)
+    await run_daily(storage, [MONZA], settings, RunOptions(run_date=D1), transport=httpx.MockTransport(handler), clock=lambda: now[0], sleep=sleep)
+    lists = [t for t, u in starts if "/case-in-" in u]
+    details = [t for t, u in starts if "www.trovacasa.it/annunci/" in u]  # photos live on another host
+    assert len(details) == 5
+    assert all(b - a >= 1 / 0.3 - 1e-9 for a, b in zip(lists, lists[1:]))
+    assert all(b - a >= 1 / 1.5 - 1e-9 for a, b in zip(details, details[1:]))
+    assert any(b - a < 1 / 0.3 for a, b in zip(details, details[1:]))  # details are not paced like lists
+
+
+async def test_failed_last_page_does_not_lead_past_the_end_nor_to_disappearances(site, storage):
+    site.listings[("milano", "vendita")] = [str(i) for i in range(1, 73)]  # exactly 3 pages
+    await run(site, storage, D1)
+    site.listings[("milano", "vendita")].remove("70")
+    site.failing_pages.add(("milano", "vendita", 3))
+    site.requests.clear()
+    report = await run(site, storage, D2)
+    assert "segments_not_ok" in report["alerts"]
+    assert not [u for u in site.requests if "case-in-vendita/milano?page=4" in u]
+    assert all(s.status == "active" for s in st(storage).values())
+
+
+async def test_failed_page_reached_through_next_link_records_no_disappearances(site, storage):
+    site.listings[("milano", "vendita")] = [str(i) for i in range(1, 51)]
+    await run(site, storage, D1)
+    site.listings[("milano", "vendita")].remove("49")  # on page 3
+    site.declared_override[("milano", "vendita")] = 30  # declared: 2 pages, page 3 only via "next"
+    site.failing_pages.add(("milano", "vendita", 3))
+    report = await run(site, storage, D2)
+    assert "segments_not_ok" in report["alerts"]
+    assert all(s.status == "active" for s in st(storage).values())

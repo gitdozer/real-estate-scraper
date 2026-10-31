@@ -126,7 +126,8 @@ def parse_list_page(html: str, city: str, contract: str, page: int) -> ListPage:
         declared = len(parsed)  # con 1 annuncio il sito non scrive il numero ("case in affitto a …")
     else:
         declared = None
-    return ListPage(cards=cards, declared_total=declared, skipped_cards=len(parsed) - len(cards))
+    has_next = tree.css_first("a.pager__link.next") is not None
+    return ListPage(cards=cards, declared_total=declared, skipped_cards=len(parsed) - len(cards), has_next=has_next)
 
 
 _LAT = re.compile(r"var latitude = (-?[\d.]+);")

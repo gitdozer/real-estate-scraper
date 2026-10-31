@@ -95,3 +95,11 @@ def test_property_type_with_inner_a():
 def test_property_types_from_last_page_fixture():
     p = parse_list_page(fx("list_milano_vendita_last.html"), "milano", "vendita", 727)
     assert "Villa a Schiera" in {c.property_type for c in p.cards}
+
+
+def test_has_next_follows_the_pager():
+    # The collection follows the pager's "next" link instead of requesting a page past the end
+    # (decision 0006): the last page has no "next" link.
+    assert parse_list_page(fx("list_milano_vendita_p1.html"), "milano", "vendita", 1).has_next is True
+    assert parse_list_page(fx("list_milano_vendita_last.html"), "milano", "vendita", 727).has_next is False
+    assert parse_list_page(fx("list_zerbolo_affitto_one.html"), "zerbolo", "affitto", 1).has_next is False
