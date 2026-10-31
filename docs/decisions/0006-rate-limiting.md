@@ -50,6 +50,14 @@ At **0.5 requests/s, one connection, never repeating a URL**: 1,303 distinct pag
 
 A log of the old scraper (GitHub Actions, Azure westus, 2026-10-06) shows: 714 search-result pages one at a time with a 2.5 s pause (**0.30 req/s**, 39.5 minutes, 0 errors), then **17,132 detail pages with 4 connections at ~2.9 req/s for 99 minutes**, with 2 "Server disconnected" errors and 3 listings missing. All our stalls happened on search-result pages, and so did the probes. Working hypothesis: the site limits mainly **search-result pages** (~0.5 req/s sustainable), much less detail pages; the "parallel connections" conclusion of the first update came from search-result pages too. Alternatively the site may have tightened its limits after 2026-10-06 (possibly after our first launch at ~12 req/s on 2026-10-27). The `probe` command can now probe detail pages (`--kind detail`, `--concurrency`); next measurement: detail pages at 2.5 req/s with 2 connections for 45 minutes.
 
+### Detail pages hold; every stall follows a 404 (2026-10-31)
+
+- **Detail-page probe** (run 41094245148): after 300 search-result pages at 0.5 req/s, **3,985 detail pages in 45 minutes with 2 connections** (rate cap 2.5/s, ~1.5/s reached because of the 1.34 s latency): **0 timeouts, 0 errors**.
+- **The collection at 0.5 req/s stalled too** (run 41076923737): ~750 requests in 25 minutes, then timeouts, exactly as at 12, 3 and 2.4 req/s. So the rate was not the cause.
+- In **all four** runs with heartbeats, the first timeouts come **right after the only 404**: the extra page requested after the last page of Milano sale (`n_pages + 1`, to catch listings shifted during the collection). The search-results probe at 0.5 req/s met its first 404s at minute 44 of 45 and saw nothing after them. The old scraper followed the pager's "next" link and never requested a page past the end.
+
+**New hypothesis:** requesting a search-result page that does not exist (404) makes the site penalise the IP (about half of the following requests hang for hours). Test: `probe --kind list --first-page 600`, which reaches the 404 pages of Milano rent (past page ~646) while the Milano sale pages are still valid (up to ~728); if those valid pages start timing out right after the first 404s, the hypothesis is confirmed.
+
 ## Decision
 - The HTTP client uses **a single connection** to the site and to the photo host (`site_concurrency = image_concurrency = 1`) and respects a **maximum request rate**: `site_rate_per_s = 3`, `image_rate_per_s = 4` (the photo limit has not been measured yet). With real latencies (0.3–0.6 s) the effective rate is ~2–3 requests/s.
 - **Every failed attempt** (timeout, 5xx, 429) counts immediately towards the error rate: if it exceeds 20%, concurrency and rate are halved (down to 0.25 requests/s), and then the circuit breaker opens.

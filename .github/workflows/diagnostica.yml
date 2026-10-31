@@ -19,6 +19,10 @@ on:
         description: "Connections sharing the rate"
         type: string
         default: "1"
+      first_page:
+        description: "List kind: first search-result page to request"
+        type: string
+        default: "1"
 
 permissions:
   contents: read
@@ -37,4 +41,5 @@ jobs:
           IN_PHASES: ${{ inputs.phases }}
           IN_KIND: ${{ inputs.kind }}
           IN_CONCURRENCY: ${{ inputs.concurrency }}
-        run: uv run --no-dev python -m scraper probe --phases "$IN_PHASES" --kind "$IN_KIND" --concurrency "$IN_CONCURRENCY"
+          IN_FIRST_PAGE: ${{ inputs.first_page }}
+        run: uv run --no-dev python -m scraper probe --phases "$IN_PHASES" --kind "$IN_KIND" --concurrency "$IN_CONCURRENCY" --first-page "$IN_FIRST_PAGE"

@@ -84,3 +84,23 @@ def test_probe_detail_kind_harvests_urls_then_probes_them(monkeypatch, capsys):
     assert seen["harvest"] == (10, "milano", "vendita", 0.5)  # search-result pages read below their limit
     assert seen["probe"][1:] == ([(2.5, 45.0)], 2)
     assert "detail pages, 2 connection(s)" in capsys.readouterr().out
+
+
+def test_probe_list_kind_can_start_from_a_given_page(monkeypatch):
+    # Used to reach the end of the search results quickly (hypothesis: a request beyond the
+    # last page, answered with 404, makes the site penalise the IP).
+    import scraper.probe as probe
+
+    seen = {}
+
+    async def fake_probe(urls, phases, settings, concurrency=1, **kw):
+        seen["urls"] = urls
+        return [{"rate": 0.5, "minutes": 1, "requests": 0, "ok": 0, "timeouts": 0, "latency_avg_s": 0}]
+
+    monkeypatch.setattr(probe, "run_probe", fake_probe)
+    monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
+    assert main(["probe", "--kind", "list", "--first-page", "600", "--phases", "0.5:1"]) == 0
+    assert seen["urls"][:2] == [
+        "https://www.trovacasa.it/case-in-vendita/milano?page=600",
+        "https://www.trovacasa.it/case-in-affitto/milano?page=600",
+    ]
