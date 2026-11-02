@@ -81,3 +81,6 @@ At 0.5 req/s from search-result page 600: from minute 3 to 9 the valid Milano sa
 - Bootstrap: ~35,000 detail pages ≈ 6.5 hours, i.e. **~2 nights** (the queue carries over).
 - Not yet proven: ~1,700 search-result pages at 0.3/s in one run (the old scraper read 714). The other municipalities have few, shallow pages. The nightly run is the test; the heartbeat shows it if the site starts hanging.
 - Raising the paces later: only one at a time, after a 45-minute probe that holds.
+
+## Outcome (2026-11-01)
+The first two runs with 0.1.4 (2026-10-31 and 2026-11-01) read **all 1,579 search-result pages in 87.8 minutes with 0 errors**, the first full collections ever from GitHub; 13 and then 14 of 16 segments were complete. Detail pages ran at ~1.47 req/s until a short burst of 503s and timeouts made the brake halve the pace to ~0.72 req/s for the rest of the run, which never recovers (~9,500 detail pages per run instead of ~13,000). The detail backlog empties in ~2 more runs; the photos, with ~17 minutes per run, are the slowest part.
