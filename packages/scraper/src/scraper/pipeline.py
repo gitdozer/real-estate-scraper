@@ -46,6 +46,8 @@ STATE_KEY = "state/listings.parquet"
 SEGMENTS_KEY = "state/segments.parquet"
 CENSOR_WINDOW_DAYS = 7  # annunci "nuovi" nei primi giorni di un segmento: probabilmente già online prima
 RAW_GONE_SAMPLES = 50  # pagine di controlli 404/redirect conservate per capire come il sito mostra un annuncio rimosso
+DETAIL_SHARE = 0.75  # details stop here, leaving photos at least 15% of the runtime (they had ~5%, 2026-11-01)
+PHOTO_SHARE = 0.90  # photos stop here; the rest is for writing
 LIST_SHARE = 0.40  # quota del tempo massimo per gli elenchi: oltre, le pagine non lette contano come fallite
 MAX_EXTRA_PAGES = 5  # pages followed through "next" links past the declared total (listings shifted during the run)
 CHUNK = 500  # richieste per blocco: un'interruzione (scadenza, circuito) non fa perdere i blocchi già fatti
@@ -375,7 +377,7 @@ async def run_daily(
 
         # 3. dettagli
         tasks: list[DetailTask] = [] if circuit else plan_details(prev, cards, check_segments, settings, run_date)
-        detail_deadline = t0 + 0.85 * settings.max_runtime_minutes * 60
+        detail_deadline = t0 + DETAIL_SHARE * settings.max_runtime_minutes * 60
         details: dict[ListingKey, Detail] = {}
         checks: dict[ListingKey, CheckOutcome] = {}
         raw_rows: list[dict] = []
@@ -453,7 +455,7 @@ async def run_daily(
         # 5. foto
         new_keys = {(e.source, e.listing_id) for e in events if e.type == "new"}
         ptasks = [] if circuit else plan_photos(new_state, cards, new_keys, settings)
-        photo_deadline = t0 + 0.90 * settings.max_runtime_minutes * 60
+        photo_deadline = t0 + PHOTO_SHARE * settings.max_runtime_minutes * 60
         photo_rows: list[dict] = []
         pstats: Counter[str] = Counter()
         hashed: Counter[ListingKey] = Counter()

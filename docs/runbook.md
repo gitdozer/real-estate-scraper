@@ -42,7 +42,7 @@ uv run python -m scraper run [options]
 | `--date 2026-10-26` | date of the run (default: today, Europe/Rome time zone) |
 | `--full-details` | downloads the detail page of every listing, not just new / changed / rotation ones |
 | `--max-pages N` | only the first N pages per segment — **for testing only**: it blocks the recording of disappearances and makes the run exit with an error |
-| `--max-runtime-minutes M` | maximum duration (default 100). Past 85% no more detail pages are downloaded, past 90% no more photos: the remaining work is carried over to the next day |
+| `--max-runtime-minutes M` | maximum duration (default 330). Past 75% no more detail pages are downloaded, past 90% no more photos: the remaining work is carried over to the next day |
 | `--dry-run` | runs everything but writes nothing |
 
 The command exits with **code 1** (and GitHub sends the failure email) if a segment is incomplete, if active listings drop by more than 5%, or if the site returns too many errors (circuit breaker open). The collected data is written anyway.

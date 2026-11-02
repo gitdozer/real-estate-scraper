@@ -201,3 +201,18 @@ async def test_rerun_without_history_on_first_day_starts_from_empty(site, storag
     await run(site, storage, D1)
     await run(site, storage, D1)
     assert sorted(t for _, t in events(storage, D1)) == ["new"] * 30
+
+
+async def test_photos_get_time_after_the_details_deadline(site, storage):
+    # Details stop at 75% of the runtime and photos at 90%: with a detail backlog the photos
+    # used to get only ~17 minutes per run (2026-10-31/11-01).
+    calls = iter([0.0])
+    at_80_percent = 0.80 * SET.max_runtime_minutes * 60
+
+    def clock():
+        return next(calls, at_80_percent)
+
+    report = await run(site, storage, D1, clock=clock)
+    assert report["details"].get("done", 0) == 0 and report["details"]["skipped_deadline"] > 0
+    assert report["photos"].get("done", 0) > 0
+    assert report["events"].get("removed", 0) == 0

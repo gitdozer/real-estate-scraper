@@ -4,6 +4,10 @@ Changes per component. Versions follow [SemVer](https://semver.org/), with tags 
 
 ## scraper
 
+### 0.1.5 — 2026-11-02
+- Brake release: after a window of requests with at most 5% failures, concurrency and pace go back up one step, never beyond the configured values (a short burst of 503s used to halve the detail pace for the rest of the run).
+- Detail pages stop at 75% of the maximum runtime instead of 85%, so photos get ~50 minutes per run instead of ~17 while there is a backlog. Search-result pages are unchanged.
+
 ### 0.1.4 — 2026-10-31
 - Search-result pages at **0.3 requests/s** with one connection, like the old scraper, and **never a page past the last one**: the pager's "next" link is followed (at most 5 extra pages) for listings shifted during the collection.
 - Detail pages on their own client: **2 connections at 1.5 requests/s** (measured: 3,985 pages in 45 minutes without errors).

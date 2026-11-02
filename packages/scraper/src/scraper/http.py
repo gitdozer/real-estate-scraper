@@ -84,6 +84,8 @@ class Fetcher:
         self._settings = settings
         self._limit = max(1, concurrency)
         self._rate = rate_per_s  # 0 = nessun limite di ritmo
+        self._max_limit = self._limit  # the brake release never goes beyond the configured pace
+        self._max_rate = rate_per_s
         self._next_start: float | None = None
         self._pace_lock = asyncio.Lock()
         self._active = 0
@@ -155,7 +157,16 @@ class Fetcher:
         self._window.append(failed)
         if len(self._window) < self._window.maxlen:
             return
-        if sum(self._window) / len(self._window) <= self._settings.error_threshold:
+        failure_rate = sum(self._window) / len(self._window)
+        if failure_rate <= self._settings.error_threshold:
+            # Brake release: after a nearly clean window (at most a quarter of the threshold,
+            # i.e. 5%) go back one step, never beyond the configured pace. Without it a short
+            # burst of 503s halved the detail pace for the rest of the run (2026-10-31/11-01).
+            slowed = self._limit < self._max_limit or self._rate < self._max_rate
+            if slowed and failure_rate <= self._settings.error_threshold / 4:
+                self._window.clear()
+                self._limit = min(self._max_limit, self._limit * 2)
+                self._rate = min(self._max_rate, self._rate * 2)
             return
         self._window.clear()
         can_slow = self._limit > 1 or (self._rate > 0 and self._rate / 2 >= _MIN_RATE)

@@ -68,6 +68,7 @@ At 0.5 req/s from search-result page 600: from minute 3 to 9 the valid Milano sa
 - Photos: one connection at 4 requests/s (separate host, limit not measured yet).
 - **Every failed attempt** (timeout, 5xx, 429) counts towards the error rate: above 20%, concurrency and rate are halved (down to 0.25 requests/s), then the circuit breaker opens; pages already read are kept, and an interrupted segment never records disappearances.
 - The **search-results phase has a deadline** (40% of the maximum run time), which also stops retries.
+- *(0.1.5, 2026-11-02)* **Brake release:** after a window with at most 5% failures, the pace goes back up one step, never beyond the configured one. Detail pages stop at 75% of the run time and photos at 90% (photos had ~17 minutes per run).
 - Progress logs per phase, a heartbeat every minute during the search-results phase, and separate request statistics for search results and detail pages in the summary.
 
 *Earlier decisions, superseded:* 3 req/s with 6 connections (2026-10-29); one connection at 3 req/s (2026-10-30, "parallel connections" hypothesis); 0.5 req/s for every page (2026-10-30, "volume per IP" hypothesis).
