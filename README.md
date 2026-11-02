@@ -2,11 +2,11 @@
 
 A personal project that collects, every day, the residential property listings (sale and rent) of a few municipalities in Lombardy, in order to build — later on — a model that estimates price and time to sell.
 
-**Status:** Phase 1 ready for production rollout — daily collection from trovacasa.it on GitHub Actions, data on Cloudflare R2. Setup and first start: [`docs/runbook.md`](docs/runbook.md).
+**Status:** Phase 1 in production since 2026-10-31 — daily collection from trovacasa.it on GitHub Actions, data on Cloudflare R2. Setup and first start: [`docs/runbook.md`](docs/runbook.md).
 
 | Component | Folder | Status |
 |---|---|---|
-| Scraper (daily collection) | [`packages/scraper`](packages/scraper) | 0.1.0 |
+| Scraper (daily collection) | [`packages/scraper`](packages/scraper) | 0.2.0 |
 | Local dashboard (Streamlit) | `packages/dashboard` | Phase 3 |
 | Models (price, time to sell) | `packages/models` | Phase 5 |
 

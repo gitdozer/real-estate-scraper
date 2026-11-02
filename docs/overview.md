@@ -23,7 +23,7 @@ It is a personal, spare-time project that uses only free tools.
 
 | Phase | Content | Status |
 |---|---|---|
-| 1 | Automatic daily collection (GitHub Actions → Cloudflare R2), per-listing history, signals for recognizing re-posted listings (agency reference, coordinates, photo fingerprints, description) | code ready (0.1.0), awaiting production rollout |
+| 1 | Automatic daily collection (GitHub Actions → Cloudflare R2), per-listing history, signals for recognizing re-posted listings (agency reference, coordinates, photo fingerprints, description) | in production since 2026-10-31 (first full collections from GitHub; current version 0.2.0) |
 | 2 | Recognizing re-posts and duplicates: a "property" entity that groups several listings | to do |
 | 3 | Local dashboard (Streamlit + DuckDB) | to do |
 | 4 | More sources (agency-network sites without anti-bot protection) | to do |

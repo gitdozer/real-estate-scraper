@@ -4,6 +4,13 @@ Changes per component. Versions follow [SemVer](https://semver.org/), with tags 
 
 ## scraper
 
+### 0.2.0 — 2026-11-08
+- **The project is now entirely in English**: code comments, docstrings, log messages, CLI help, the GitHub job summary, workflow names, configuration comments and documentation (the docs were translated earlier, in commit 895035a). Italian remains only where it is data or text read from the site (`vendita`, `affitto`, detail-page labels, quoted page text).
+- Log phase tags are now `[start]`, `[lists]`, `[details]`, `[photos]`, `[checks]`, `[write]`; the heartbeat reads "in progress".
+- Workflows renamed: "Raccolta giornaliera" → **Daily collection**; "Diagnosi ritmo" → **Rate probe**, with its file renamed from `diagnostica.yml` to `probe.yml` (past runs stay listed under the old name in the Actions tab).
+- Rebased on 0.1.9 (same day): includes decisions 0007 and 0008.
+- No change in behavior, data or schema: same columns, same values, same `SCHEMA_VERSION`; data from 0.1.x and 0.2.0 can be used together.
+
 ### 0.1.9 — 2026-11-08
 - **Disappearances from the list evidence** (decision 0008, issue #2): an active listing absent from a segment collected completely has its absence counted even without a detail-page check; on the second consecutive counted absence it becomes `delisted` (`delisted_date` = first day of absence). A sampled check answering 404 still makes it `removed` at once; an error or no check leaves the count to the list. Incomplete or missing collections change nothing, as before.
 - Revises decision 0005, which required a conclusive detail-page check: since decision 0007 that check can be made for one listing per run only.
