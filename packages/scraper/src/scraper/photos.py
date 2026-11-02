@@ -1,8 +1,8 @@
-"""Impronte percettive delle foto (spec §6.4).
+"""Perceptual fingerprints of the photos (spec §6.4).
 
-Le immagini non vengono salvate: se ne tiene solo l'impronta (64 bit, 16 caratteri
-esadecimali). Due foto uguali ridimensionate o ricompresse hanno impronte vicine
-(distanza di Hamming bassa): serve in fase 2 per riconoscere le ripubblicazioni.
+The images are not saved: only their fingerprint is kept (64 bits, 16 hex
+characters). The same photo resized or recompressed gets a nearby fingerprint
+(low Hamming distance): phase 2 uses this to recognize relisted properties.
 """
 
 import io
@@ -12,7 +12,7 @@ from PIL import Image, UnidentifiedImageError
 
 
 def hash_image(content: bytes) -> tuple[str, str] | None:
-    """Restituisce (phash, dhash) in esadecimale, oppure None se i bytes non sono un'immagine."""
+    """Returns (phash, dhash) as hex, or None if the bytes are not an image."""
     try:
         with Image.open(io.BytesIO(content)) as img:
             img = img.convert("RGB")
@@ -22,5 +22,5 @@ def hash_image(content: bytes) -> tuple[str, str] | None:
 
 
 def hamming(a: str, b: str) -> int:
-    """Numero di bit diversi tra due impronte esadecimali."""
+    """Number of differing bits between two hex fingerprints."""
     return bin(int(a, 16) ^ int(b, 16)).count("1")

@@ -1,19 +1,19 @@
-"""Client HTTP asincrono: tentativi automatici, freno adattivo, statistiche (spec §6.6).
+"""Async HTTP client: automatic retries, adaptive backoff, statistics (spec §6.6).
 
-Regole:
-- si ritentano errori di rete/timeout, risposte 5xx e 429, e il redirect del sito
-  verso /Error/... (errori 500 intermittenti di trovacasa);
-- 404 e gli altri 4xx sono risposte definitive, non errori: un 404 è l'informazione
-  "annuncio rimosso" e non deve frenare la raccolta. Fanno eccezione 401/403/451
-  (accesso negato: il sito ci sta bloccando), che contano come fallimenti e azionano
-  il freno e il circuito: se una fonte blocca, la si abbandona;
-- ritmo limitato (`rate_per_s`): tra l'inizio di due richieste passa almeno 1/rate secondi.
-  Da GitHub trovacasa tollera ~3 richieste/s; a ~12/s lascia appese le richieste (2026-10-29);
-- ogni TENTATIVO fallito (timeout, 5xx, 429, redirect di errore) conta nel tasso di errori,
-  anche se un tentativo successivo riesce: un sito che rallenta va assecondato subito.
-  Se nelle ultime `error_window` richieste i fallimenti superano `error_threshold`,
-  concorrenza e ritmo si dimezzano; quando sono già al minimo si apre il circuito
-  (CircuitOpen) e il run si ferma in modo pulito;
+Rules:
+- network errors/timeouts, 5xx and 429 responses, and the site's redirect to
+  /Error/... (trovacasa's intermittent 500 errors) are retried;
+- 404 and the other 4xx are final answers, not errors: a 404 carries the information
+  "listing removed" and must not slow the collection down. The exceptions are 401/403/451
+  (access denied: the site is blocking us), which count as failures and trigger the
+  backoff and the circuit: if a source blocks us, it is dropped;
+- limited request rate (`rate_per_s`): at least 1/rate seconds pass between the start of two
+  requests. From GitHub, trovacasa tolerates ~3 requests/s; at ~12/s it leaves requests hanging (2026-10-29);
+- every failed ATTEMPT (timeout, 5xx, 429, error redirect) counts toward the error rate,
+  even if a later attempt succeeds: a site that slows down must be accommodated right away.
+  If failures in the last `error_window` requests exceed `error_threshold`,
+  concurrency and rate are halved; when they are already at the minimum the circuit opens
+  (CircuitOpen) and the run stops cleanly;
 - the deadline of `get_many` also stops retries: a request whose first attempt started
   before the deadline is not retried after it, and counts as failed.
 """
@@ -41,7 +41,7 @@ BROWSER_HEADERS = {
 }
 
 _MAX_BACKOFF_S = 30.0
-_MIN_RATE = 0.25  # richieste/s: sotto questo ritmo, invece di rallentare ancora, si apre il circuito
+_MIN_RATE = 0.25  # requests/s: below this rate, the circuit opens instead of slowing down further
 _BLOCKED = (401, 403, 451)
 
 
@@ -61,7 +61,7 @@ class FetchResult:
 
 
 class CircuitOpen(Exception):
-    """Troppi errori anche a concorrenza 1: il sito è in difficoltà o ci sta bloccando.
+    """Too many errors even at concurrency 1: the site is struggling or blocking us.
 
     Raised by `get_many`, `partial` holds the results obtained before the circuit opened,
     in the order of the URLs (None = not completed), so that pages already read are kept."""
@@ -92,7 +92,7 @@ class Fetcher:
         self._stop_on_status = stop_on_status
         self._stopped: str | None = None  # "http_<status>" once a stop status has been received
         self._limit = max(1, concurrency)
-        self._rate = rate_per_s  # 0 = nessun limite di ritmo
+        self._rate = rate_per_s  # 0 = no rate limit
         self._max_limit = self._limit  # the brake release never goes beyond the configured pace
         self._max_rate = rate_per_s
         self._next_start: float | None = None
@@ -152,7 +152,7 @@ class Fetcher:
                 self._cond.notify_all()
 
     async def _pace(self) -> None:
-        """Attende il proprio turno: le richieste partono distanziate di almeno 1/rate secondi."""
+        """Wait for our turn: requests start at least 1/rate seconds apart."""
         if self._rate <= 0:
             return
         async with self._pace_lock:
@@ -253,7 +253,7 @@ class Fetcher:
                             error=f"http_{status}" if blocked else None,
                             attempts=attempt,
                         )
-            self._record(failed=True)  # ogni tentativo fallito conta, anche se il prossimo riesce
+            self._record(failed=True)  # every failed attempt counts, even if the next one succeeds
             if deadline is not None and self._clock() >= deadline:
                 break  # past the deadline no retries: the request counts as failed (not as skipped)
             if attempt < self._settings.max_retries:
@@ -264,7 +264,7 @@ class Fetcher:
         return FetchResult(url=url, status=status, text=None, content=None, final_url=final_url, error=error, attempts=attempts)
 
     async def get_many(self, urls: list[str], binary: bool = False, deadline: float | None = None) -> list[FetchResult | None]:
-        """Scarica in parallelo, nell'ordine dato. None = non eseguita perché la scadenza era passata."""
+        """Download in parallel, in the given order. None = not made because the deadline had passed."""
         tasks = [asyncio.ensure_future(self._get(u, binary, deadline)) for u in urls]
         try:
             return list(await asyncio.gather(*tasks))

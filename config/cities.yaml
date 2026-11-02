@@ -1,7 +1,7 @@
-# Comuni da raccogliere.
-# Per aggiungere un comune basta una riga: nome, codice ISTAT (6 cifre),
-# slug usato da ciascuna fonte nell'URL, contratti da raccogliere.
-# Codici ISTAT verificati il 2026-10-25.
+# Municipalities to collect.
+# Adding a municipality takes one line: name, ISTAT code (6 digits),
+# the slug each source uses in its URLs, contracts to collect.
+# ISTAT codes verified on 2026-10-25.
 cities:
   - {name: Milano,        istat: "015146", slugs: {trovacasa: milano},        contracts: [vendita, affitto]}
   - {name: Busto Arsizio, istat: "012026", slugs: {trovacasa: busto-arsizio}, contracts: [vendita, affitto]}

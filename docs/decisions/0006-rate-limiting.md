@@ -10,7 +10,7 @@ The first launch on GitHub Actions (27 October) and the runs on the following da
 
 The site does not answer with 403 or 429. Towards datacenter IPs, when the request rate is too high, it **leaves requests hanging**. From the user's home IP the same rate works fine (1,528 pages in 1.1 minutes). The old scraper, which was slower (result pages one at a time with a 2.5 s pause), never ran into the problem.
 
-Diagnosis from GitHub using the `probe` command (workflow "Diagnosi ritmo", i.e. "request-rate diagnosis"), sending requests one at a time:
+Diagnosis from GitHub using the `probe` command (workflow "Rate probe"), sending requests one at a time:
 
 | Rate | Requests | Succeeded | Timeouts | Mean latency |
 |---|---|---|---|---|

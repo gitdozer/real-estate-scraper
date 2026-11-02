@@ -47,7 +47,7 @@ def test_boundaries():
 
 
 def test_suspicious_drop_vs_previous_active():
-    # Il sito dichiara "0 case" (o un totale sballato) ma ieri c'erano 17.000 annunci attivi.
+    # The site declares "0 case" (or a garbled total) but yesterday there were 17,000 active listings.
     assert segment_ok(0, 0, 0, S, prev_active=17000) == (False, "suspicious_drop")
     assert segment_ok(9000, 9000, 0, S, prev_active=17000) == (False, "suspicious_drop")
 

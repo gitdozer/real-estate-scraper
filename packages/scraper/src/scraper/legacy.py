@@ -1,10 +1,10 @@
-"""Import una tantum dello storico del vecchio scraper (spec §6.5).
+"""One-off import of the old scraper's historical data (spec §6.5).
 
-Il CSV contiene gli annunci di Milano in vendita visti il 2026-10-17. Serve a:
-- sapere che gli annunci ancora online al primo run lo erano almeno dal 2026-10-17;
-- registrare come scomparsi, con le loro caratteristiche, quelli spariti nel frattempo.
-Si scrive: il Parquet completo in legacy/, una partizione observations del 2026-10-17
-(source_run = "legacy"), il CSV originale in legacy/ e, se non esiste, lo stato iniziale.
+The CSV holds the Milan sale listings seen on 2026-10-17. It is used to:
+- know that listings still online at the first run have been online since at least 2026-10-17;
+- record the ones gone in the meantime as disappeared, with their characteristics.
+Written: the full Parquet in legacy/, an observations partition for 2026-10-17
+(source_run = "legacy"), the original CSV in legacy/ and, if it does not exist, the initial state.
 """
 
 import ast
@@ -42,7 +42,7 @@ def _number(text: str) -> float | None:
 
 
 def _int(text: str) -> int | None:
-    """'2.0' → 2 (nel CSV i conteggi sono scritti come float)."""
+    """'2.0' → 2 (the CSV writes counts as floats)."""
     try:
         return int(float(text)) if text else None
     except ValueError:
@@ -93,9 +93,9 @@ def _parse_row(row: dict) -> tuple[dict, Card]:
 
 def import_legacy(csv_path: Path, storage: Storage, force: bool = False) -> int:
     if storage.list_keys("runs/"):
-        raise RuntimeError("Ci sono già run giornalieri: importare lo storico ora sovrascriverebbe lo stato raccolto.")
+        raise RuntimeError("Daily runs already exist: importing the historical data now would overwrite the collected state.")
     if storage.read_bytes(STATE_KEY) is not None and not force:
-        raise RuntimeError("Lo stato esiste già: l'import dello storico va fatto prima del primo run (usa --force per forzare).")
+        raise RuntimeError("The state already exists: the historical data must be imported before the first run (use --force to override).")
     version = scraper_version()
     with open(csv_path, encoding="utf-8", newline="") as f:
         parsed = [_parse_row(r) for r in csv.DictReader(f, delimiter=";")]

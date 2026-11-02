@@ -1,24 +1,24 @@
-# Raccolta giornaliera degli annunci. Guida: docs/runbook.md
-# Le action sono fissate a un commit esatto (sicurezza e riproducibilità); il commento indica la versione.
-# Il repository è pubblico: i log sono pubblici. Lo scraper scrive nei log e nel
-# riepilogo SOLO conteggi aggregati; i dati vanno su Cloudflare R2.
-name: Raccolta giornaliera
+# Daily collection of listings. Guide: docs/runbook.md
+# Actions are pinned to an exact commit (security and reproducibility); the comment gives the version.
+# The repository is public, so the logs are public. The scraper writes ONLY aggregate
+# counts to the logs and the summary; the data goes to Cloudflare R2.
+name: Daily collection
 
 on:
   schedule:
-    - cron: "17 2 * * *"  # 02:17 UTC = notte italiana; minuto non tondo per evitare i picchi di GitHub
+    - cron: "17 2 * * *"  # 02:17 UTC = Italian night; odd minute to avoid GitHub's load peaks
   workflow_dispatch:
     inputs:
       cities:
-        description: "Comuni (slug separati da virgola, vuoto = tutti)"
+        description: "Municipalities (comma-separated slugs, empty = all)"
         type: string
         default: ""
       full_details:
-        description: "Scarica il dettaglio di tutti gli annunci"
+        description: "Download the detail page of every listing"
         type: boolean
         default: false
       max_pages:
-        description: "Pagine massime per segmento (0 = tutte; >0 solo per prove, blocca le scomparse)"
+        description: "Maximum pages per segment (0 = all; >0 for tests only, blocks disappearances)"
         type: number
         default: 0
       max_runtime_minutes:
@@ -26,11 +26,11 @@ on:
         type: number
         default: 330
       dry_run:
-        description: "Esegui senza scrivere nulla"
+        description: "Run without writing anything"
         type: boolean
         default: false
       job_timeout_minutes:
-        description: "Limite di sicurezza del job in minuti (max 350; deve superare la durata massima del run)"
+        description: "Job safety limit in minutes (max 350; must exceed the maximum run duration)"
         type: number
         default: 350
 
@@ -44,14 +44,14 @@ permissions:
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    # Rete di sicurezza: la scadenza vera è gestita dallo scraper. Il run pianificato non ha input → 120.
+    # Safety net: the scraper manages the real deadline. The scheduled run has no inputs → 350.
     timeout-minutes: ${{ fromJSON(format('{0}', inputs.job_timeout_minutes || 350)) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e  # v10.3.2
-      - name: Installa le dipendenze
+      - name: Install dependencies
         run: uv sync --locked --package scraper --no-dev
-      - name: Raccolta
+      - name: Collect
         env:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}

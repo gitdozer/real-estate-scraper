@@ -1,4 +1,4 @@
-"""Caricamento della configurazione: comuni (cities.yaml) e parametri (settings.yaml)."""
+"""Configuration loading: cities (cities.yaml) and parameters (settings.yaml)."""
 
 from pathlib import Path
 from typing import Any, Literal

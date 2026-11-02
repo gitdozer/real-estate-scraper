@@ -47,8 +47,8 @@ def test_partition_key():
 def test_prune_partitions_keeps_recent(tmp_path):
     s = LocalStorage(tmp_path)
     run = date(2026, 10, 26)
-    s.write_bytes(partition_key("raw", date(2026, 7, 18)), b"old")  # 100 giorni prima
-    s.write_bytes(partition_key("raw", date(2026, 10, 16)), b"new")  # 10 giorni prima
+    s.write_bytes(partition_key("raw", date(2026, 7, 18)), b"old")  # 100 days earlier
+    s.write_bytes(partition_key("raw", date(2026, 10, 16)), b"new")  # 10 days earlier
     assert prune_partitions(s, "raw", keep_days=90, run_date=run) == 1
     assert s.list_keys("raw/") == [partition_key("raw", date(2026, 10, 16))]
 

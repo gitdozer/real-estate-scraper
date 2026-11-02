@@ -1,12 +1,12 @@
-"""Riconciliazione dello stato degli annunci: il cuore della regola "sparito = venduto".
+"""Listing state reconciliation: the core of the "gone = sold" rule.
 
-Funzione pura (nessun I/O). Regole in docs/disappearance-logic.md; in sintesi:
-- un annuncio presente negli elenchi è attivo (nuovo, invariato, ribassato o ricomparso);
-- un annuncio assente cambia stato SOLO se il suo segmento è stato raccolto per
-  intero oggi: ogni assenza da una raccolta completa conta (decision 0008); alla
-  seconda consecutiva → delisted; se il controllo del dettaglio risponde 404 → removed
-  subito (il controllo è un campione, decision 0007);
-- segmenti incompleti o non raccolti non cambiano nulla, né in un senso né nell'altro.
+Pure function (no I/O). Rules in docs/disappearance-logic.md; in short:
+- a listing present in the search results is active (new, unchanged, price-cut or reappeared);
+- an absent listing changes state ONLY if its segment was collected in full today:
+  every absence from a complete collection counts (decision 0008); on the second
+  consecutive one → delisted; if the detail-page check answers 404 → removed at once
+  (the check is made for a sample only, decision 0007);
+- incomplete or uncollected segments change nothing, in either direction.
 """
 
 from datetime import date
@@ -60,7 +60,7 @@ def _present(prev: ListingState | None, card: Card, bootstrap: bool, run_date: d
 
     spell_start = prev.spell_start
     if prev.status != "active":
-        # Ricompare con lo stesso ID: si chiude il periodo precedente (date nell'evento) e se ne apre uno nuovo.
+        # Reappears with the same ID: close the previous spell (dates in the event) and open a new one.
         events.append(
             Event(
                 **ev,
@@ -107,7 +107,7 @@ def _absent(prev: ListingState, check: CheckOutcome | None, run_date: date, even
             return prev.model_copy(update=dict(status="removed", detail_gone_date=run_date, last_check_date=run_date))
         return prev.model_copy(update=dict(last_check_date=run_date)) if checked else prev
 
-    return prev  # removed: resta tale finché non ricompare negli elenchi
+    return prev  # removed: stays so until it reappears in the search results
 
 
 def _apply_detail(state: ListingState, detail: Detail, run_date: date, events: list[Event]) -> ListingState:
@@ -129,10 +129,10 @@ def reconcile(
     bootstrap_segments: set[SegmentKey],
     run_date: date,
 ) -> tuple[dict[ListingKey, ListingState], list[Event]]:
-    """Calcola il nuovo stato e gli eventi del giorno.
+    """Compute the new state and the day's events.
 
-    `cards` contiene le schede viste oggi (già deduplicate) dei soli segmenti raccolti.
-    `checks` contiene l'esito dei controlli di dettaglio degli annunci assenti.
+    `cards` holds the cards seen today (already deduplicated), for the collected segments only.
+    `checks` holds the results of the detail-page checks of absent listings.
     """
     new: dict[ListingKey, ListingState] = dict(prev)
     events: list[Event] = []
@@ -144,7 +144,7 @@ def reconcile(
         if key in cards:
             continue
         if old.segment not in scraped_segments or not segment_ok.get(old.segment, False):
-            continue  # segmento non raccolto o incompleto: nessuna scomparsa
+            continue  # segment not collected or incomplete: no disappearance
         new[key] = _absent(old, checks.get(key), run_date, events)
 
     for key, detail in details.items():

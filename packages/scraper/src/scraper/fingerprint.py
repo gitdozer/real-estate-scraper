@@ -1,4 +1,4 @@
-"""Impronte (hash brevi) per capire se una scheda o un dettaglio sono cambiati."""
+"""Fingerprints (short hashes) that tell whether a listing card or a detail page has changed."""
 
 import hashlib
 import json
@@ -12,7 +12,7 @@ def _hash16(payload: object) -> str:
 
 
 def card_fingerprint(card: Card) -> str:
-    """Cambia solo se cambia il contenuto della scheda, non la sua posizione negli elenchi."""
+    """Changes only when the card's content changes, not its position in the search results."""
     return _hash16(
         [
             card.price_eur,
@@ -27,7 +27,7 @@ def card_fingerprint(card: Card) -> str:
 
 
 def detail_hash(detail: Detail) -> str:
-    """Cambia se cambia un qualsiasi dato della pagina di dettaglio."""
+    """Changes when any piece of data on the detail page changes."""
     return _hash16(detail.model_dump(exclude={"source"}))
 
 

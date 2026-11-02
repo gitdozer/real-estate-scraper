@@ -207,7 +207,7 @@ def test_reconcile_keeps_listings_not_mentioned():
     assert set(new) == {K, ("trovacasa", "2")} and new[("trovacasa", "2")] == b
 
 
-# --- periodi online (spell) e date negli eventi: revisione Task 6 -------------
+# --- online periods (spells) and dates in events: Task 6 review ---------------
 
 def test_new_listing_starts_spell_and_event_has_segment():
     new, events = run({}, cards=[card("1")])

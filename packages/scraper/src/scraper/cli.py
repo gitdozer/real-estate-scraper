@@ -1,4 +1,4 @@
-"""Riga di comando: `python -m scraper run | status | import-legacy`. Guida in docs/runbook.md."""
+"""Command line: `python -m scraper run | status | import-legacy`. Guide in docs/runbook.md."""
 
 import argparse
 import asyncio
@@ -28,8 +28,8 @@ def _storage(args) -> Storage:
 
 
 def _add_storage_args(p: argparse.ArgumentParser) -> None:
-    p.add_argument("--storage", choices=["local", "r2"], default="local", help="dove leggere/scrivere i dati")
-    p.add_argument("--local-root", default="data", help="cartella dati per --storage local")
+    p.add_argument("--storage", choices=["local", "r2"], default="local", help="where to read/write the data")
+    p.add_argument("--local-root", default="data", help="data folder for --storage local")
 
 
 def _cmd_run(args) -> int:
@@ -44,7 +44,7 @@ def _cmd_run(args) -> int:
         known = {c.slugs.get("trovacasa") for c in cities}
         unknown = sorted(set(only) - known)
         if unknown:
-            print(f"Comuni sconosciuti: {', '.join(unknown)}. Disponibili: {', '.join(sorted(known))}", file=sys.stderr)
+            print(f"Unknown cities: {', '.join(unknown)}. Available: {', '.join(sorted(known))}", file=sys.stderr)
             return 2
     run_date = date.fromisoformat(args.date) if args.date else _today()
     report = asyncio.run(run_daily(_storage(args), cities, settings, RunOptions(run_date=run_date, cities=only, dry_run=args.dry_run)))
@@ -60,14 +60,14 @@ def _cmd_status(args) -> int:
     storage = _storage(args)
     reports = [k for k in storage.list_keys("runs/") if k.endswith("report.json")]
     if not reports:
-        print("Nessun run trovato.")
+        print("No runs found.")
         return 1
     last = json.loads(storage.read_bytes(reports[-1]))
     last_date = date.fromisoformat(last["run_date"])
     age = (_today() - last_date).days
-    print(f"Ultimo run: {last_date} ({age} giorni fa), esito: {'OK' if last.get('exit_code') == 0 else 'da controllare'}")
+    print(f"Last run: {last_date} ({age} days ago), outcome: {'OK' if last.get('exit_code') == 0 else 'needs checking'}")
     if age > args.max_age_days:
-        print(f"ATTENZIONE: nessuna raccolta da più di {args.max_age_days} giorni.")
+        print(f"WARNING: no collection for more than {args.max_age_days} days.")
         return 1
     return 0
 
@@ -76,7 +76,7 @@ def _cmd_import_legacy(args) -> int:
     from scraper.legacy import import_legacy
 
     n = import_legacy(Path(args.csv_path), _storage(args), force=args.force)
-    print(f"Importati {n} annunci dallo storico.")
+    print(f"Imported {n} listings from the historical data.")
     return 0
 
 
@@ -102,8 +102,8 @@ def _cmd_probe(args) -> int:
         pages = range(args.first_page, args.first_page + 999)
         urls = [list_url(args.city, contract, page) for page in pages for contract in ("vendita", "affitto")]
     results = asyncio.run(run_probe(urls, phases, settings, concurrency=args.concurrency))
-    summary = f"## Diagnosi del ritmo ({args.kind} pages, {args.concurrency} connection(s))\n\n"
-    summary += "| req/s | minuti | richieste | ok | timeout | latenza media (s) |\n|---:|---:|---:|---:|---:|---:|\n"
+    summary = f"## Rate probe ({args.kind} pages, {args.concurrency} connection(s))\n\n"
+    summary += "| req/s | minutes | requests | ok | timeouts | mean latency (s) |\n|---:|---:|---:|---:|---:|---:|\n"
     summary += "".join(
         f"| {p['rate']} | {p['minutes']:g} | {p['requests']} | {p['ok']} | {p['timeouts']} | {p['latency_avg_s']} |\n" for p in results
     )
@@ -115,28 +115,28 @@ def _cmd_probe(args) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="scraper", description="Raccolta giornaliera degli annunci immobiliari")
+    parser = argparse.ArgumentParser(prog="scraper", description="Daily collection of real-estate listings")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    run = sub.add_parser("run", help="esegue la raccolta del giorno")
+    run = sub.add_parser("run", help="run the day's collection")
     _add_storage_args(run)
-    run.add_argument("--date", help="data del run (YYYY-MM-DD), default oggi (Europe/Rome)")
-    run.add_argument("--cities", help="slug dei comuni separati da virgola, default tutti")
-    run.add_argument("--full-details", action="store_true", help="scarica il dettaglio di tutti gli annunci")
-    run.add_argument("--max-pages", type=int, help="limita le pagine per segmento (test; blocca le scomparse)")
-    run.add_argument("--max-runtime-minutes", type=int, help="durata massima del run")
-    run.add_argument("--dry-run", action="store_true", help="non scrive nulla")
-    run.add_argument("--config-dir", default="config", help="cartella con cities.yaml e settings.yaml")
+    run.add_argument("--date", help="run date (YYYY-MM-DD), default today (Europe/Rome)")
+    run.add_argument("--cities", help="comma-separated city slugs, default all")
+    run.add_argument("--full-details", action="store_true", help="download the detail page of every listing")
+    run.add_argument("--max-pages", type=int, help="limit the pages per segment (testing; blocks disappearances)")
+    run.add_argument("--max-runtime-minutes", type=int, help="maximum run duration")
+    run.add_argument("--dry-run", action="store_true", help="write nothing")
+    run.add_argument("--config-dir", default="config", help="folder containing cities.yaml and settings.yaml")
     run.set_defaults(func=_cmd_run)
 
-    status = sub.add_parser("status", help="controlla che la raccolta sia aggiornata")
+    status = sub.add_parser("status", help="check that the collection is up to date")
     _add_storage_args(status)
     status.add_argument("--max-age-days", type=int, default=2)
     status.set_defaults(func=_cmd_status)
 
-    probe = sub.add_parser("probe", help="diagnosi: quante richieste accetta il sito a ritmi diversi")
-    probe.add_argument("--city", default="milano", help="slug del comune le cui pagine elenco usare")
-    probe.add_argument("--phases", default="0.5:45", help="fasi 'richieste_al_secondo:minuti' separate da virgola")
+    probe = sub.add_parser("probe", help="probe: how many requests the site accepts at different rates")
+    probe.add_argument("--city", default="milano", help="slug of the city whose search-result pages to use")
+    probe.add_argument("--phases", default="0.5:45", help="comma-separated 'requests_per_second:minutes' phases")
     probe.add_argument("--kind", choices=("list", "detail"), default="list", help="pages to probe: search results or detail pages")
     probe.add_argument("--concurrency", type=int, default=1, help="connections sharing the rate")
     probe.add_argument("--first-page", type=int, default=1, help="list kind: first search-result page to request")
@@ -146,20 +146,20 @@ def build_parser() -> argparse.ArgumentParser:
     probe.add_argument("--config-dir", default="config")
     probe.set_defaults(func=_cmd_probe)
 
-    legacy = sub.add_parser("import-legacy", help="importa lo storico CSV del vecchio scraper (una tantum)")
+    legacy = sub.add_parser("import-legacy", help="import the old scraper's historical CSV (one-off)")
     _add_storage_args(legacy)
     legacy.add_argument("csv_path")
-    legacy.add_argument("--force", action="store_true", help="importa anche se lo stato esiste già")
+    legacy.add_argument("--force", action="store_true", help="import even if the state already exists")
     legacy.set_defaults(func=_cmd_import_legacy)
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    # Le librerie HTTP loggano ogni URL (= dati degli annunci): i log di GitHub sono pubblici.
+    # The HTTP libraries log every URL (= listing data): GitHub logs are public.
     for name in ("httpx", "httpcore", "botocore", "boto3", "urllib3", "s3transfer"):
         logging.getLogger(name).setLevel(logging.WARNING)
-    # Console Windows (cp1252): evita errori sui caratteri non ASCII del riepilogo.
+    # Windows console (cp1252): avoids errors on the summary's non-ASCII characters.
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8", errors="replace")
@@ -167,16 +167,16 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return args.func(args)
     except RunRefused as exc:
-        print(f"Run rifiutato: {exc}", file=sys.stderr)  # il messaggio contiene solo date
+        print(f"Run refused: {exc}", file=sys.stderr)  # the message contains only dates
         return 2
     except ConfigError as exc:
-        print(f"Configurazione: {exc}", file=sys.stderr)  # solo nomi di variabili, nessun dato
+        print(f"Configuration: {exc}", file=sys.stderr)  # variable names only, no data
         return 1
     except Exception as exc:
-        # Il testo dell'errore può contenere dati degli annunci (URL, titoli): nel log pubblico
-        # va solo il tipo; il dettaglio completo si salva nello storage, che è privato.
+        # The error text may contain listing data (URLs, titles): only its type goes to the
+        # public log; the full details are saved to storage, which is private.
         saved = _save_crash(args, traceback.format_exc())
-        print(f"Errore imprevisto: {type(exc).__name__}. Dettagli: {saved or 'non salvati'}", file=sys.stderr)
+        print(f"Unexpected error: {type(exc).__name__}. Details: {saved or 'not saved'}", file=sys.stderr)
         return 1
 
 

@@ -1,11 +1,11 @@
-"""Record dei dati raccolti. Le colonne sono documentate in docs/data-dictionary.md."""
+"""Records of the collected data. The columns are documented in docs/data-dictionary.md."""
 
 from datetime import date
 from typing import Literal
 
 from pydantic import BaseModel
 
-# Incrementare a ogni modifica dello schema dei file Parquet e annotarla nel dizionario dati.
+# Bump on every change to the Parquet schema and record it in the data dictionary.
 SCHEMA_VERSION = 1
 
 ListingKey = tuple[str, str]  # (source, listing_id)
@@ -13,7 +13,7 @@ SegmentKey = tuple[str, str, str]  # (source, city_slug, contract)
 
 
 class Card(BaseModel):
-    """Scheda di un annuncio come appare nella pagina elenco."""
+    """A listing card as it appears on the search-result page."""
 
     source: str
     listing_id: str
@@ -46,7 +46,7 @@ class Card(BaseModel):
 
 
 class Detail(BaseModel):
-    """Dati della pagina di dettaglio di un annuncio."""
+    """Data from a listing's detail page."""
 
     source: str
     listing_id: str
@@ -81,9 +81,9 @@ CheckOutcome = Literal["alive", "gone", "error"]
 
 
 class ListingState(BaseModel):
-    """Stato corrente di un annuncio (una riga di state/listings.parquet).
+    """Current state of a listing (one row of state/listings.parquet).
 
-    Le tre date della scomparsa sono spiegate in docs/disappearance-logic.md.
+    The three disappearance dates are explained in docs/disappearance-logic.md.
     """
 
     source: str
@@ -121,10 +121,10 @@ class ListingState(BaseModel):
 
 
 class Event(BaseModel):
-    """Un fatto accaduto a un annuncio in un run.
+    """Something that happened to a listing in a run.
 
-    Gli eventi di scomparsa (`removed`, `delisted`) e `reappeared` riportano le date
-    del periodo online appena chiuso: spell_start → list_last_seen è un tempo di permanenza.
+    Disappearance events (`removed`, `delisted`) and `reappeared` carry the dates of the
+    online spell that just ended: spell_start → list_last_seen is a time on market.
     """
 
     source: str
@@ -143,5 +143,5 @@ class Event(BaseModel):
 class ListPage(BaseModel):
     cards: list[Card]
     declared_total: int | None
-    skipped_cards: int = 0  # schede senza link o senza ID, scartate
+    skipped_cards: int = 0  # listing cards without a link or ID, discarded
     has_next: bool = False  # the pager links to a next page (the last page has no "next" link)

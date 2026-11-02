@@ -51,7 +51,7 @@ async def test_first_live_run_after_legacy(tmp_path):
     s = LocalStorage(tmp_path)
     import_legacy(CSV, s)
     site = FakeSite()
-    site.listings[("milano", "vendita")] = ["1", "4", "5", "77"]  # 2 e 3 spariti (404), 77 nuovo
+    site.listings[("milano", "vendita")] = ["1", "4", "5", "77"]  # 2 and 3 gone (404), 77 new
     site.prices.update({"1": "209.000 &#x20AC;", "4": "1.450.000 &#x20AC;", "5": "320.000 &#x20AC;"})
     day = date(2026, 10, 26)
     # two absence checks are needed on the same day (the production sample is 1, decision 0007)
@@ -64,7 +64,7 @@ async def test_first_live_run_after_legacy(tmp_path):
     assert by_type["removed"] == {"2", "3"} and by_type["new"] == {"77"} and by_type["price_change"] == {"1"}
     state = load_state(s)
     assert state[("trovacasa", "2")].list_last_seen == date(2026, 10, 17)
-    assert state[("trovacasa", "77")].first_seen_censored is True  # primo run completo del segmento
+    assert state[("trovacasa", "77")].first_seen_censored is True  # the segment's first complete run
     assert all(state[("trovacasa", k)].last_detail_date == day for k in ("1", "4", "5", "77"))
 
 

@@ -34,7 +34,7 @@ def test_http_libraries_do_not_log_urls(tmp_path):
     write_report(tmp_path, date.today())
     main(["status", "--storage", "local", "--local-root", str(tmp_path)])
     for name in ("httpx", "httpcore", "botocore", "urllib3"):
-        assert logging.getLogger(name).level >= logging.WARNING, name  # impostato esplicitamente, non ereditato
+        assert logging.getLogger(name).level >= logging.WARNING, name  # set explicitly, not inherited
 
 
 def test_crash_prints_only_error_type(tmp_path, capsys, monkeypatch):
@@ -57,7 +57,7 @@ def test_refused_run_exits_2(tmp_path, monkeypatch):
     from scraper.pipeline import RunRefused
 
     async def refuse(*a, **k):
-        raise RunRefused("data precedente all'ultimo run")
+        raise RunRefused("date before the last run")
 
     monkeypatch.setattr(cli, "run_daily", refuse)
     assert main(["run", "--storage", "local", "--local-root", str(tmp_path), "--cities", "marnate"]) == 2

@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 TESTS = Path(__file__).resolve().parent
-sys.path.insert(0, str(TESTS))  # rende importabile tests/fakesite.py
+sys.path.insert(0, str(TESTS))  # makes tests/fakesite.py importable
 
 
 def fx(name: str) -> str:

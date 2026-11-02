@@ -41,5 +41,5 @@ def test_summary_shows_list_and_detail_requests_separately():
         "details": {"requests": 5400, "retries": 9, "failures": 1, "by_status": {"200": 5300, "404": 100}, "concurrency_now": 2},
     }
     md = summary_markdown(report)
-    assert "**Richieste elenchi:** 1700" in md and "**Richieste dettagli:** 5400" in md
+    assert "**Requests to search results:** 1700" in md and "**Requests to detail pages:** 5400" in md
     assert "404: 100" in md

@@ -5,12 +5,12 @@ from scraper import frames
 
 def test_frame_rejects_unknown_keys():
     row = {k: None for k in frames.SEGMENTS} | {"extra": 1}
-    with pytest.raises(ValueError, match="sconosciute"):
+    with pytest.raises(ValueError, match="unknown columns"):
         frames.frame([row], frames.SEGMENTS)
 
 
 def test_frame_rejects_missing_keys():
-    with pytest.raises(ValueError, match="mancanti"):
+    with pytest.raises(ValueError, match="missing columns"):
         frames.frame([{"source": "x"}], frames.SEGMENTS)
 
 

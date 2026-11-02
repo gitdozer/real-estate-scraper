@@ -10,8 +10,8 @@ def picture(kind: str, size=(400, 300)) -> Image.Image:
     d = ImageDraw.Draw(img)
     w, h = size
     if kind == "stanza":
-        d.rectangle([0, int(h * 0.6), w, h], fill=(120, 80, 40))  # pavimento
-        d.rectangle([int(w * 0.1), int(h * 0.15), int(w * 0.4), int(h * 0.5)], fill=(90, 160, 220))  # finestra
+        d.rectangle([0, int(h * 0.6), w, h], fill=(120, 80, 40))  # floor
+        d.rectangle([int(w * 0.1), int(h * 0.15), int(w * 0.4), int(h * 0.5)], fill=(90, 160, 220))  # window
         d.ellipse([int(w * 0.6), int(h * 0.3), int(w * 0.9), int(h * 0.7)], fill=(30, 30, 30))
     else:
         for i in range(0, w, 40):
@@ -45,5 +45,5 @@ def test_different_image_is_far():
 
 
 def test_invalid_bytes_return_none():
-    assert hash_image(b"non e' un'immagine") is None
+    assert hash_image(b"not an image") is None
     assert hash_image(b"") is None

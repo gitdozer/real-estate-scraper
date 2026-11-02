@@ -1,5 +1,5 @@
-"""Ritmo limitato e freno sensibile ai rallentamenti (diagnosi del 2026-10-29: da GitHub
-il sito tollera ~3 richieste al secondo; a ~12 al secondo lascia appese le richieste)."""
+"""Limited request rate and a backoff that reacts to slowdowns (probe of 2026-10-29: from GitHub
+the site tolerates ~3 requests per second; at ~12 per second it leaves requests hanging)."""
 
 import httpx
 
@@ -53,8 +53,8 @@ async def test_timeouts_that_later_succeed_still_engage_the_brake():
     def handler(request):
         n = attempts.get(str(request.url), 0)
         attempts[str(request.url)] = n + 1
-        if n == 0:  # il primo tentativo resta appeso, il secondo riesce: come su GitHub
-            raise httpx.ReadTimeout("appesa", request=request)
+        if n == 0:  # the first attempt hangs, the second succeeds: as on GitHub
+            raise httpx.ReadTimeout("hung", request=request)
         return httpx.Response(200)
 
     f = Fetcher(6, Settings(error_window=10, max_retries=2), rate_per_s=4.0,

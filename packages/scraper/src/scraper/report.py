@@ -1,7 +1,7 @@
-"""Riepilogo leggibile del run per il job summary di GitHub.
+"""Human-readable run summary for the GitHub job summary.
 
-Il repository è pubblico: qui vanno SOLO numeri aggregati. Niente URL, ID di annunci
-o campioni di errori (quelli restano nel report completo su R2).
+The repository is public: ONLY aggregate numbers go here. No URLs, listing IDs
+or error samples (those stay in the full report on R2).
 """
 
 
@@ -10,41 +10,41 @@ def _counts(d: dict) -> str:
 
 
 def summary_markdown(report: dict) -> str:
-    esito = "✅ OK" if report["exit_code"] == 0 else "❌ Da controllare"
+    esito = "✅ OK" if report["exit_code"] == 0 else "❌ Needs checking"
     lines = [
-        f"## Raccolta del {report['run_date']} — {esito}",
+        f"## Collection of {report['run_date']} — {esito}",
         "",
-        f"Durata: {report['duration_s'] / 60:.1f} min · versione `{report['scraper_version']}`"
+        f"Duration: {report['duration_s'] / 60:.1f} min · version `{report['scraper_version']}`"
         + (" · **rerun**" if report.get("rerun") else "")
         + (" · **dry-run**" if report.get("dry_run") else ""),
         "",
-        "| Comune | Contratto | Dichiarati | Raccolti | Attivi prima | Pagine | Pagine fallite | Completo |",
+        "| City | Contract | Declared | Collected | Active before | Pages | Failed pages | Complete |",
         "|---|---|---:|---:|---:|---:|---:|---|",
     ]
     for s in report["segments"]:
-        ok = "sì" if s["ok"] else f"no ({s['reason']})"
+        ok = "yes" if s["ok"] else f"no ({s['reason']})"
         lines.append(
             f"| {s['city']} | {s['contract']} | {s['declared']} | {s['unique']} | {s['prev_active']} | {s['pages']} | {s['failed_pages']} | {ok} |"
         )
     d, p = report["details"], report["photos"]
     lines += [
         "",
-        f"**Eventi:** {_counts(report['events'])}",
+        f"**Events:** {_counts(report['events'])}",
         "",
-        f"**Annunci attivi:** {report['active']['prev']} → {report['active']['now']}",
+        f"**Active listings:** {report['active']['prev']} → {report['active']['now']}",
         "",
-        f"**Dettagli pianificati:** {_counts(d.get('planned', {}))} · scaricati {d.get('done', 0)}"
-        f" · 404 {d.get('gone', 0)} · errori {d.get('errors', 0)} · oltre la scadenza {d.get('skipped_deadline', 0)}",
+        f"**Detail pages planned:** {_counts(d.get('planned', {}))} · downloaded {d.get('done', 0)}"
+        f" · 404 {d.get('gone', 0)} · errors {d.get('errors', 0)} · past the deadline {d.get('skipped_deadline', 0)}",
         "",
-        f"**Foto:** pianificate {p.get('planned', 0)} · impronte {p.get('done', 0)} · fallite {p.get('failed', 0)}"
-        f" · oltre la scadenza {p.get('skipped_deadline', 0)}",
+        f"**Photos:** planned {p.get('planned', 0)} · fingerprints {p.get('done', 0)} · failed {p.get('failed', 0)}"
+        f" · past the deadline {p.get('skipped_deadline', 0)}",
     ]
     # "site" = reports written before 0.1.4, when lists and details shared one client
-    for key, label in (("lists", "elenchi"), ("details", "dettagli"), ("site", "al sito")):
+    for key, label in (("lists", "search results"), ("details", "detail pages"), ("site", "the site")):
         stats = report.get("fetch", {}).get(key)
         if stats:
-            lines += ["", f"**Richieste {label}:** {stats['requests']} · ritentate {stats['retries']} · fallite {stats['failures']} · concorrenza finale {stats['concurrency_now']}"]
-            lines += ["", f"**Codici HTTP {label}:** {_counts(stats.get('by_status', {}))}"]  # es. 403 = il sito ci sta bloccando
+            lines += ["", f"**Requests to {label}:** {stats['requests']} · retried {stats['retries']} · failed {stats['failures']} · final concurrency {stats['concurrency_now']}"]
+            lines += ["", f"**HTTP status codes ({label}):** {_counts(stats.get('by_status', {}))}"]  # e.g. 403 = the site is blocking us
     if report["alerts"]:
-        lines += ["", f"**⚠️ Avvisi:** {', '.join(report['alerts'])} — vedi docs/runbook.md"]
+        lines += ["", f"**⚠️ Warnings:** {', '.join(report['alerts'])} — see docs/runbook.md"]
     return "\n".join(lines) + "\n"

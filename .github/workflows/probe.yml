@@ -1,13 +1,13 @@
-# Diagnosi del limite di frequenza del sito visto dai server di GitHub. Solo avvio manuale.
-# Non usa credenziali e non scrive dati: misura quante pagine elenco il sito restituisce
-# a ritmi diversi (richieste al secondo) e riporta solo conteggi. Vedi docs/runbook.md.
-name: Diagnosi ritmo
+# Probes the site's rate limit as seen from GitHub's servers. Manual start only.
+# Uses no credentials and writes no data: measures how many search-result pages the site
+# returns at different rates (requests per second) and reports counts only. See docs/runbook.md.
+name: Rate probe
 
 on:
   workflow_dispatch:
     inputs:
       phases:
-        description: "Fasi 'richieste_al_secondo:minuti' separate da virgola"
+        description: "Comma-separated phases 'requests_per_second:minutes'"
         type: string
         default: "0.5:45"
       kind:
@@ -42,9 +42,9 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e  # v10.3.2
-      - name: Installa le dipendenze
+      - name: Install dependencies
         run: uv sync --locked --package scraper --no-dev
-      - name: Diagnosi
+      - name: Probe
         env:
           IN_PHASES: ${{ inputs.phases }}
           IN_KIND: ${{ inputs.kind }}

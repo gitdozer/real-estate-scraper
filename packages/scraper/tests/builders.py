@@ -1,4 +1,4 @@
-"""Costruttori di record per i test della logica (stato, pianificazione)."""
+"""Record builders for the logic tests (state, planning)."""
 
 from datetime import date
 

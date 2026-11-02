@@ -21,7 +21,7 @@ SET = Settings(max_retries=1)
 @pytest.fixture
 def site():
     s = FakeSite()
-    s.listings[("milano", "vendita")] = [str(i) for i in range(1, 31)]  # 2 pagine
+    s.listings[("milano", "vendita")] = [str(i) for i in range(1, 31)]  # 2 pages
     s.listings[("monza", "vendita")] = [str(i) for i in range(101, 106)]
     return s
 
@@ -32,7 +32,7 @@ def storage(tmp_path):
 
 
 async def run(site, storage, day, cities=(MILANO,), settings=SET, only=None, dry=False, clock=None):
-    async def instant(_seconds):  # il ritmo limitato non deve rallentare i test
+    async def instant(_seconds):  # the rate limit must not slow the tests down
         return None
 
     kwargs = {"sleep": instant} if clock is None else {"clock": clock, "sleep": instant}
@@ -110,7 +110,7 @@ async def test_max_pages_marks_segment_incomplete(site, storage):
 
 
 async def test_collect_cards_dedupes_by_key(site, storage):
-    site.extra_on_page[("milano", "vendita", 2)] = ["1"]  # lo stesso annuncio su due pagine
+    site.extra_on_page[("milano", "vendita", 2)] = ["1"]  # the same listing on two pages
     await run(site, storage, D1)
     obs = read_parquet(storage, partition_key("observations", D1))
     assert len(obs) == 30 and obs["listing_id"].n_unique() == 30
@@ -120,12 +120,12 @@ async def test_pipeline_respects_deadline(site, storage):
     calls = iter([0.0])
 
     def clock():
-        return next(calls, 1e9)  # dopo l'avvio il tempo è già scaduto
+        return next(calls, 1e9)  # after the start the time has already run out
 
     report = await run(site, storage, D1, clock=clock)
     state = st(storage)
-    # Tempo già scaduto: si legge solo la pagina 1 di ogni segmento (24 annunci), nessun dettaglio,
-    # ma il run si chiude e scrive quanto raccolto; il segmento risulta incompleto.
+    # Time already up: only page 1 of each segment is read (24 listings), no detail pages,
+    # but the run finishes and writes what it collected; the segment is incomplete.
     assert len(state) == 24 and all(s.last_detail_date is None for s in state.values())
     assert len(read_parquet(storage, partition_key("observations", D1))) == 24
     assert report["details"]["skipped_deadline"] == 24
@@ -194,7 +194,7 @@ async def test_incomplete_segment_gets_no_absence_checks(site, storage):
     site.requests.clear()
     await run(site, storage, D2)
     assert not any("/annunci/" in u and u.endswith("-5") for u in site.requests)
-    assert not any("/annunci/" in u and u.endswith("-30") for u in site.requests)  # sulla pagina fallita
+    assert not any("/annunci/" in u and u.endswith("-30") for u in site.requests)  # on the failed page
 
 
 async def test_rerun_without_history_on_first_day_starts_from_empty(site, storage):

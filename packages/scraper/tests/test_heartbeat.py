@@ -1,4 +1,4 @@
-"""Diagnosi dei blocchi: latenze delle richieste e battito periodico durante le fasi lunghe."""
+"""Stall diagnosis: request latencies and a periodic heartbeat during long phases."""
 
 import asyncio
 import logging
@@ -22,7 +22,7 @@ async def test_stats_report_latency_and_in_flight():
     clock = Clock()
 
     def handler(request):
-        clock.now += 2.0  # ogni richiesta "dura" 2 secondi
+        clock.now += 2.0  # every request "takes" 2 seconds
         return httpx.Response(200, text="ok")
 
     f = Fetcher(2, Settings(), transport=httpx.MockTransport(handler), clock=clock)
@@ -35,8 +35,8 @@ async def test_stats_report_latency_and_in_flight():
 async def test_heartbeat_logs_progress_without_urls(caplog):
     caplog.set_level(logging.INFO, logger="scraper")
     f = Fetcher(2, Settings(), transport=httpx.MockTransport(lambda r: httpx.Response(200)))
-    task = asyncio.create_task(_heartbeat(f, "elenchi", lambda: 1.5, every_s=0.01))
+    task = asyncio.create_task(_heartbeat(f, "lists", lambda: 1.5, every_s=0.01))
     await asyncio.sleep(0.05)
     task.cancel()
     text = "\n".join(r.getMessage() for r in caplog.records)
-    assert "[elenchi] in corso" in text and "richieste" in text and "http" not in text
+    assert "[lists] in progress" in text and "requests" in text and "http" not in text

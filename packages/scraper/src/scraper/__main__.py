@@ -1,4 +1,4 @@
-"""Permette `python -m scraper ...`."""
+"""Enables `python -m scraper ...`."""
 
 import sys
 

@@ -1,4 +1,4 @@
-"""Interfaccia comune delle fonti. Una nuova fonte (es. sito di un'agenzia) implementa questi metodi."""
+"""Common interface of the sources. A new source (e.g. an agency's website) implements these methods."""
 
 from typing import Protocol
 

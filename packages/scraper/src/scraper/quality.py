@@ -1,4 +1,4 @@
-"""Controlli di qualità: quando una raccolta è abbastanza completa da poter registrare scomparse."""
+"""Quality checks: when a collection is complete enough to record disappearances."""
 
 from scraper.config import Settings
 
@@ -11,14 +11,14 @@ def segment_ok(
     prev_active: int = 0,
     drop_runs: int = 0,
 ) -> tuple[bool, str | None]:
-    """Un segmento è completo se nessuna pagina è fallita e gli annunci raccolti coprono il totale dichiarato.
+    """A segment is complete if no page failed and the listings collected cover the declared total.
 
-    `prev_active` = annunci attivi del segmento prima del run. Se oggi ne vediamo molti meno,
-    il totale dichiarato dal sito potrebbe essere sbagliato (stessa pagina, stesso guasto):
-    il segmento non è affidabile (`suspicious_drop`). Se però il calo si ripete per
-    `drop_confirm_runs` run consecutivi (`drop_runs` = run precedenti già in calo), lo si
-    considera reale (`drop_confirmed`) e le scomparse vengono registrate.
-    Restituisce (ok, motivo). Solo i segmenti ok possono generare scomparse.
+    `prev_active` = the segment's active listings before the run. If today we see far fewer,
+    the total declared by the site could be wrong (same page, same fault):
+    the segment is not reliable (`suspicious_drop`). If, however, the drop repeats for
+    `drop_confirm_runs` consecutive runs (`drop_runs` = previous runs already in a drop), it is
+    treated as real (`drop_confirmed`) and the disappearances are recorded.
+    Returns (ok, reason). Only ok segments can produce disappearances.
     """
     if failed_pages > 0:
         return False, "failed_pages"
@@ -38,5 +38,5 @@ def segment_ok(
 
 
 def active_drop_alert(prev_active: int, now_active: int, settings: Settings) -> bool:
-    """Vero se gli annunci attivi sono calati più della soglia rispetto al run precedente."""
+    """True if active listings dropped by more than the threshold compared with the previous run."""
     return prev_active > 0 and (prev_active - now_active) / prev_active > settings.active_drop_alert

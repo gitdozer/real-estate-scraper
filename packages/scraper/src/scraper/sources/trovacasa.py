@@ -1,4 +1,4 @@
-"""Fonte trovacasa.it: URL e parsing delle pagine. Struttura del sito in docs/sources/trovacasa.md."""
+"""The trovacasa.it source: URLs and page parsing. Site structure in docs/sources/trovacasa.md."""
 
 import re
 
@@ -18,7 +18,7 @@ _TITLE_MARKERS = (" da privato", " all'asta", " all’asta")
 
 def list_url(city_slug: str, contract: str, page: int) -> str:
     url = f"{BASE_URL}/case-in-{contract}/{city_slug}"
-    # La pagina 1 va richiesta senza parametro: "?page=1" risponde 301.
+    # Page 1 must be requested without the parameter: "?page=1" answers 301.
     return url if page == 1 else f"{url}?page={page}"
 
 
@@ -27,14 +27,14 @@ def detail_url(path_or_id: str) -> str:
 
 
 def photo_url(photo_id: str) -> str:
-    # Due formati osservati: "A_<agenzia>_<annuncio>_<foto>" (agenzie) e "X_<...>_<annuncio>_<foto>" (privati).
+    # Two observed formats: "A_<agency>_<listing>_<photo>" (agencies) and "X_<...>_<listing>_<photo>" (private sellers).
     if photo_id.startswith("A_"):
         return f"https://img.trovacasa.it/annunci/mlis/{photo_id}/foto.jpg"
     return f"https://pic.trovacasa.it/image/{photo_id.rsplit('_', 1)[-1]}/m-c.jpg"
 
 
 def _to_number(text: str) -> float | None:
-    """'1.200,5 m²' → 1200.5 (punto = migliaia, virgola = decimali)."""
+    """'1.200,5 m²' → 1200.5 (dot = thousands, comma = decimals)."""
     m = re.search(r"\d[\d.]*(?:,\d+)?", text)
     if not m:
         return None
@@ -48,8 +48,8 @@ def _text(node: Node | None) -> str:
 def _property_type(title: str, city_slug: str) -> str | None:
     """'Villa a Schiera da privato a Milano via …' → 'Villa a Schiera'.
 
-    La tipologia finisce al primo marcatore ("da privato", "all'asta") oppure
-    prima di " a <comune>"; non basta il primo " a " (es. "Villa a Schiera").
+    The property type ends at the first marker ("da privato", "all'asta") or
+    before " a <city>"; the first " a " is not enough (e.g. "Villa a Schiera").
     """
     lower = title.lower()
     markers = (*_TITLE_MARKERS, f" a {city_slug.replace('-', ' ')}")
@@ -67,7 +67,7 @@ def _parse_card(node: Node, city: str, contract: str, page: int, position: int) 
     listing_id = id_node.attributes.get("data-id") if id_node is not None else None
     listing_id = listing_id or (url_match.group(2) if url_match else "")
     if not href or not listing_id:
-        return None  # scheda incompleta: senza link o ID non si può seguire
+        return None  # incomplete listing card: without a link or ID it cannot be followed
 
     title = _text(link)
     lower = title.lower()
@@ -121,9 +121,9 @@ def parse_list_page(html: str, city: str, contract: str, page: int) -> ListPage:
     if m:
         declared = int(m.group(1).replace(".", ""))
     elif page == 1 and not parsed and _NO_RESULTS in html:
-        declared = 0  # comune senza annunci: la pagina dice "Nessun risultato"
+        declared = 0  # municipality with no listings: the page says "Nessun risultato"
     elif page == 1 and 0 < len(parsed) < PAGE_SIZE:
-        declared = len(parsed)  # con 1 annuncio il sito non scrive il numero ("case in affitto a …")
+        declared = len(parsed)  # with 1 listing the site does not print the number ("case in affitto a …")
     else:
         declared = None
     has_next = tree.css_first("a.pager__link.next") is not None
@@ -166,10 +166,10 @@ def parse_detail_page(html: str, listing_id: str) -> Detail:
             energy_dd = dd
         attributes[term] = _text(dd)
 
-    # Una pagina senza il codice di questo annuncio non è il suo dettaglio (pagina di errore,
-    # verifica anti-bot, sito ridisegnato): meglio un errore che un dettaglio vuoto.
+    # A page without this listing's code is not its detail page (an error page, an anti-bot
+    # check, a redesigned site): better an error than an empty detail.
     if attributes.get("Codice annuncio") != f"TC{listing_id}":
-        raise ValueError("pagina di dettaglio non riconosciuta")
+        raise ValueError("unrecognized detail page")
 
     price_text = attributes.get("Prezzo") or _text(tree.css_first("span.price"))
     price = _to_number(price_text)
@@ -210,7 +210,7 @@ def parse_detail_page(html: str, listing_id: str) -> Detail:
 
 
 class _Trovacasa:
-    """Implementazione di sources.base.Source per trovacasa.it."""
+    """Implementation of sources.base.Source for trovacasa.it."""
 
     name = NAME
     page_size = PAGE_SIZE

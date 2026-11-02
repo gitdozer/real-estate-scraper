@@ -20,7 +20,7 @@ def make(handler, concurrency=6, **settings) -> tuple[Fetcher, FakeSleep]:
 
 
 def sequence(*responses):
-    """Handler che restituisce le risposte in ordine (l'ultima si ripete)."""
+    """Handler that returns the responses in order (the last one repeats)."""
     calls = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -66,7 +66,7 @@ async def test_429_honours_retry_after():
 
 async def test_network_error_is_retried():
     def boom(request):
-        raise httpx.ConnectError("connessione rifiutata", request=request)
+        raise httpx.ConnectError("connection refused", request=request)
 
     f, _ = make(sequence(boom, httpx.Response(200)))
     r = await f.get("https://www.trovacasa.it/x")

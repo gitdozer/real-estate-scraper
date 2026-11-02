@@ -1,7 +1,7 @@
-"""Storage dei dati: cartella locale (sviluppo, test) o Cloudflare R2 (produzione).
+"""Data storage: a local folder (development, tests) or Cloudflare R2 (production).
 
-Le chiavi sono percorsi con "/" (es. "observations/dt=2026-10-26/part-0.parquet"),
-uguali in locale e su R2. Layout completo in docs/data-dictionary.md.
+Keys are "/"-separated paths (e.g. "observations/dt=2026-10-26/part-0.parquet"),
+the same locally and on R2. Full layout in docs/data-dictionary.md.
 """
 
 import io
@@ -21,7 +21,7 @@ _PARTITION_DATE = re.compile(r"/dt=(\d{4}-\d{2}-\d{2})/")
 
 
 class ConfigError(RuntimeError):
-    """Configurazione mancante o sbagliata (es. variabili d'ambiente di R2). Il messaggio è sicuro da stampare."""
+    """Missing or wrong configuration (e.g. R2 environment variables). The message is safe to print."""
 
 
 class Storage(Protocol):
@@ -50,7 +50,7 @@ class LocalStorage:
         p.parent.mkdir(parents=True, exist_ok=True)
         tmp = p.with_name(p.name + ".tmp")
         tmp.write_bytes(data)
-        tmp.replace(p)  # scrittura atomica: mai file a metà
+        tmp.replace(p)  # atomic write: never a half-written file
 
     def list_keys(self, prefix: str) -> list[str]:
         if not self.root.exists():
@@ -63,7 +63,7 @@ class LocalStorage:
 
 
 class R2Storage:
-    """Bucket Cloudflare R2 tramite l'API compatibile S3."""
+    """Cloudflare R2 bucket through its S3-compatible API."""
 
     def __init__(self, account_id: str, access_key_id: str, secret_access_key: str, bucket: str):
         import boto3
@@ -82,7 +82,7 @@ class R2Storage:
     def from_env(cls) -> "R2Storage":
         missing = [v for v in _R2_VARS if not os.environ.get(v)]
         if missing:
-            raise ConfigError(f"Variabili d'ambiente mancanti per R2: {', '.join(missing)}")
+            raise ConfigError(f"Missing environment variables for R2: {', '.join(missing)}")
         return cls(*(os.environ[v] for v in _R2_VARS))
 
     def read_bytes(self, key: str) -> bytes | None:
@@ -130,7 +130,7 @@ def read_parquet(storage: Storage, key: str) -> pl.DataFrame | None:
 
 
 def prune_partitions(storage: Storage, dataset: str, keep_days: int, run_date: date) -> int:
-    """Cancella le partizioni di `dataset` più vecchie di `keep_days` giorni. Restituisce i file cancellati."""
+    """Deletes the `dataset` partitions older than `keep_days` days. Returns the number of files deleted."""
     cutoff = run_date - timedelta(days=keep_days)
     deleted = 0
     for key in storage.list_keys(f"{dataset}/"):

@@ -1,4 +1,4 @@
-"""Pianificazione giornaliera: quali dettagli e quali foto scaricare (spec §6.2, §6.4)."""
+"""Daily planning: which detail pages and which photos to download (spec §6.2, §6.4)."""
 
 import zlib
 from dataclasses import dataclass
@@ -11,7 +11,7 @@ from scraper.models import Card, ListingKey, ListingState, SegmentKey
 from scraper.scope import classify
 
 DetailReason = Literal["absence_check", "new", "changed", "never_detailed", "delisted_recheck", "rotation", "full"]
-# Ordine di priorità: se il run deve fermarsi per tempo, si perdono prima gli ultimi.
+# Priority order: if the run has to stop for lack of time, the last ones are dropped first.
 _PRIORITY: list[str] = ["absence_check", "new", "changed", "never_detailed", "delisted_recheck", "rotation", "full"]
 
 
@@ -35,8 +35,8 @@ def _bucket(listing_id: str, days: int) -> int:
 
 
 def _rotation_due(st: ListingState, run_date: date, days: int) -> bool:
-    """Ogni annuncio ha un suo giorno fisso nel ciclo di `days` giorni, così i dettagli
-    scaricati tutti insieme (es. al bootstrap) non scadono tutti lo stesso giorno."""
+    """Each listing has its own fixed day in the `days`-day cycle, so detail pages
+    downloaded all at once (e.g. at bootstrap) do not all fall due on the same day."""
     last = st.last_detail_date
     if last is None or last >= run_date:
         return False
@@ -66,13 +66,13 @@ def plan_details(
     settings: Settings,
     run_date: date,
 ) -> list[DetailTask]:
-    """`check_segments`: segmenti raccolti E completi oggi. Solo lì i controlli di assenza
-    servono: negli altri `reconcile` ne scarterebbe comunque l'esito."""
+    """`check_segments`: segments collected AND complete today. Only there are absence checks
+    useful: in the others `reconcile` would discard their result anyway."""
     tasks: list[DetailTask] = []
 
     for key, card in cards.items():
         if not classify(card)[0]:
-            continue  # fuori perimetro: nessun dettaglio
+            continue  # out of scope: no detail page
         reason = _card_reason(prev.get(key), card, settings, run_date)
         if reason:
             tasks.append(DetailTask(key, card.url, reason))
@@ -86,8 +86,8 @@ def plan_details(
         elif st.status == "delisted" and (st.last_check_date is None or run_date - st.last_check_date >= recheck):
             tasks.append(DetailTask(key, st.url, "delisted_recheck"))
 
-    # A parità di motivo, prima i dettagli più vecchi: se la scadenza taglia la coda,
-    # non sono sempre gli stessi annunci a restare indietro.
+    # Within the same reason, oldest detail pages first: if the deadline cuts the queue,
+    # it is not always the same listings that fall behind.
     last = {k: (s.last_detail_date or date.min) for k, s in prev.items()}
     return sorted(tasks, key=lambda t: (_PRIORITY.index(t.reason), last.get(t.key, date.min)))
 
@@ -111,8 +111,8 @@ def plan_photos(
     new_keys: set[ListingKey],
     settings: Settings,
 ) -> list[PhotoTask]:
-    """Prima i nuovi (K pieno), poi le liste foto cambiate (K pieno), poi l'arretrato
-    dal più vecchio (K ridotto). Si aggiungono solo annunci interi entro il tetto."""
+    """New listings first (full K), then changed photo lists (full K), then the backlog
+    from the oldest (reduced K). Only whole listings are added, within the cap."""
     plans: list[tuple[ListingKey, int]] = []
     planned: set[ListingKey] = set()
 
@@ -126,7 +126,7 @@ def plan_photos(
         return st is not None and card is not None and st.status == "active" and st.in_scope and bool(card.photo_ids)
 
     def target(key: ListingKey) -> int:
-        # K ridotto solo per gli annunci già online all'avvio (censurati); gli altri hanno K pieno.
+        # Reduced K only for listings already online at the start (censored); the others get full K.
         return settings.photos_backlog if state[key].first_seen_censored else settings.photos_new
 
     for key in sorted(new_keys):
@@ -138,7 +138,7 @@ def plan_photos(
         if eligible(key) and st.photos_done > 0 and st.photo_ids_hash != photo_ids_hash(cards[key].photo_ids):
             add(key, settings.photos_new)
 
-    # Arretrato: annunci con meno impronte del dovuto (mai fatte, o interrotte a metà).
+    # Backlog: listings with fewer fingerprints than due (never done, or interrupted halfway).
     backlog = [k for k in cards if eligible(k) and state[k].photos_done < min(target(k), len(cards[k].photo_ids))]
     for key in sorted(backlog, key=lambda k: (state[k].first_seen, k[1])):
         add(key, target(key))

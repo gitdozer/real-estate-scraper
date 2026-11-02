@@ -1,7 +1,7 @@
-"""Schemi espliciti delle tabelle Parquet (documentati in docs/data-dictionary.md).
+"""Explicit schemas of the Parquet tables (documented in docs/data-dictionary.md).
 
-Tipi fissi anche quando una colonna è tutta nulla o la tabella è vuota: così i file di
-giorni diversi si leggono insieme senza conflitti di tipo.
+Types stay fixed even when a column is all null or the table is empty, so files from
+different days can be read together without type conflicts.
 """
 
 import polars as pl
@@ -79,14 +79,14 @@ STATE = _state_schema()
 
 
 def frame(rows: list[dict], schema: dict) -> pl.DataFrame:
-    """DataFrame con lo schema dato; le chiavi delle righe devono essere esattamente le colonne.
+    """DataFrame with the given schema; the row keys must be exactly the columns.
 
-    Una colonna in più o in meno è un errore di programmazione (campo aggiunto a un modello
-    senza aggiornare lo schema): meglio fermarsi che perdere dati in silenzio.
+    An extra or missing column is a programming error (a field added to a model without
+    updating the schema): better to stop than to lose data silently.
     """
     expected = set(schema)
     for r in rows:
         keys = set(r)
         if keys != expected:
-            raise ValueError(f"colonne sconosciute: {sorted(keys - expected)}; colonne mancanti: {sorted(expected - keys)}")
+            raise ValueError(f"unknown columns: {sorted(keys - expected)}; missing columns: {sorted(expected - keys)}")
     return pl.DataFrame(rows, schema=schema, orient="row") if rows else pl.DataFrame(schema=schema)

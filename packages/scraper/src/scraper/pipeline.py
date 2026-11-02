@@ -1,14 +1,14 @@
-"""Run giornaliero: elenchi → dettagli → stato ed eventi → foto → scrittura (spec §5, §7).
+"""Daily run: search results → detail pages → state and events → photos → writing (spec §5, §7).
 
-Flusso e garanzie in docs/architecture.md. Punti chiave:
-- un segmento incompleto non genera scomparse (quality.segment_ok + state.reconcile);
-- il lavoro oltre la scadenza si interrompe ma i dati raccolti si scrivono comunque;
-- rieseguire lo stesso giorno riparte dallo stato di prima del run di quel giorno
-  per i segmenti raccolti, e conserva quanto già scritto per gli altri segmenti;
-  la copia dello stato di partenza è la PRIMA cosa scritta: se esiste, il run è un rerun
-  (anche se il run precedente si è interrotto prima del report);
-- non si accettano date precedenti all'ultimo run (riporterebbero indietro lo stato);
-- un errore su una singola pagina non fa perdere la giornata.
+Flow and guarantees in docs/architecture.md. Key points:
+- an incomplete segment produces no disappearances (quality.segment_ok + state.reconcile);
+- work past the deadline is stopped, but the data collected is written anyway;
+- rerunning the same day restarts from the state before that day's run for the
+  segments collected, and keeps what was already written for the other segments;
+  the copy of the starting state is the FIRST thing written: if it exists, the run is a rerun
+  (even if the previous run stopped before the report);
+- dates earlier than the last run are refused (they would roll the state back);
+- an error on a single page does not lose the day.
 """
 
 import asyncio
@@ -45,15 +45,15 @@ log = logging.getLogger(__name__)
 
 STATE_KEY = "state/listings.parquet"
 SEGMENTS_KEY = "state/segments.parquet"
-CENSOR_WINDOW_DAYS = 7  # annunci "nuovi" nei primi giorni di un segmento: probabilmente già online prima
-RAW_GONE_SAMPLES = 50  # pagine di controlli 404/redirect conservate per capire come il sito mostra un annuncio rimosso
+CENSOR_WINDOW_DAYS = 7  # "new" listings in a segment's first days: probably already online before
+RAW_GONE_SAMPLES = 50  # 404/redirect check pages kept to learn how the site shows a removed listing
 DETAIL_SHARE = 0.75  # details stop here, leaving photos at least 15% of the runtime (they had ~5%, 2026-11-01)
 PHOTO_SHARE = 0.90  # photos stop here; the rest is for writing
 HEARTBEAT_S = 60.0  # heartbeat interval during the network phases
 STACK_DUMP_GRACE_S = 600  # a run still alive this long after the photo deadline is stuck: dump the stacks
-LIST_SHARE = 0.40  # quota del tempo massimo per gli elenchi: oltre, le pagine non lette contano come fallite
+LIST_SHARE = 0.40  # share of the max runtime for search results: past it, unread pages count as failed
 MAX_EXTRA_PAGES = 5  # pages followed through "next" links past the declared total (listings shifted during the run)
-CHUNK = 500  # richieste per blocco: un'interruzione (scadenza, circuito) non fa perdere i blocchi già fatti
+CHUNK = 500  # requests per chunk: an interruption (deadline, circuit) does not lose the chunks already done
 _CHECK_REASONS = ("absence_check", "delisted_recheck")
 _RAW_REASONS = ("new", "changed", "never_detailed")
 _LISTING_ID_IN_URL = re.compile(r"-(\d+)/?$")
@@ -61,7 +61,7 @@ _DT = re.compile(r"/dt=(\d{4}-\d{2}-\d{2})/")
 
 
 class RunRefused(Exception):
-    """Il run non può partire senza rischiare di corrompere lo storico (es. data precedente all'ultimo run)."""
+    """The run cannot start without risking corruption of the historical data (e.g. a date before the last run)."""
 
 
 @dataclass
@@ -82,7 +82,7 @@ class SegmentResult:
     skipped_cards: int = 0
 
 
-# --- lettura dello stato ---------------------------------------------------------
+# --- reading the state ----------------------------------------------------------
 
 
 def _read_state(storage: Storage, key: str) -> dict[ListingKey, ListingState]:
@@ -120,8 +120,8 @@ def _latest_run_date(storage: Storage) -> date | None:
 
 
 def _starting_state(current: dict, before_today: dict, scraped: set[SegmentKey]) -> dict[ListingKey, ListingState]:
-    """Stato di partenza di un rerun: per ogni annuncio si sceglie la versione di prima di oggi
-    se oggi riguarda un segmento raccolto in questo rerun, altrimenti quella attuale."""
+    """Starting state of a rerun: for each listing, take the version from before today if
+    today touches a segment collected in this rerun, otherwise the current one."""
     prev: dict[ListingKey, ListingState] = {}
     for key in set(current) | set(before_today):
         old, now = before_today.get(key), current.get(key)
@@ -129,11 +129,11 @@ def _starting_state(current: dict, before_today: dict, scraped: set[SegmentKey])
             touched = old.segment in scraped or (now is not None and now.segment in scraped)
             prev[key] = old if touched or now is None else now
         elif now is not None and now.segment not in scraped:
-            prev[key] = now  # comparso oggi in un segmento che questo rerun non tocca
+            prev[key] = now  # appeared today in a segment this rerun does not touch
     return prev
 
 
-# --- fasi del run ------------------------------------------------------------------
+# --- run phases --------------------------------------------------------------------
 
 
 async def _for_each_chunk(
@@ -145,10 +145,10 @@ async def _for_each_chunk(
     handle: Callable[[Any, FetchResult | None], None],
     progress: Callable[[int, int], None] | None = None,
 ) -> str | None:
-    """Scarica a blocchi di CHUNK richieste ed elabora ogni blocco SUBITO, prima di scaricare
-    il successivo: in memoria resta un solo blocco di pagine o immagini alla volta (al bootstrap
-    i dettagli sono ~35.000: tenerli tutti in memoria supererebbe i 16 GB del runner).
-    `handle(item, risultato)` riceve None per le richieste non eseguite (scadenza o circuito).
+    """Download in chunks of CHUNK requests and process each chunk RIGHT AWAY, before downloading
+    the next: only one chunk of pages or images is in memory at a time (at bootstrap there are
+    ~35,000 detail pages: keeping them all in memory would exceed the runner's 16 GB).
+    `handle(item, result)` receives None for requests not made (deadline or circuit).
     Returns "circuit" if the circuit opened, "stopped" if the fetcher stopped after a stop
     status (e.g. the first 404 of the detail phase, decision 0007), None otherwise."""
     for i in range(0, len(items), CHUNK):
@@ -170,13 +170,13 @@ async def _for_each_chunk(
 
 
 async def _heartbeat(fetcher: Fetcher, phase: str, minutes: Callable[[], float], every_s: float | None = None) -> None:
-    """Battito periodico durante una fase lunga: se il run si blocca, il log dice dove e come.
-    Solo conteggi e latenze, nessun dato degli annunci."""
+    """Periodic heartbeat during a long phase: if the run stalls, the log says where and how.
+    Counts and latencies only, no listing data."""
     while True:
         await asyncio.sleep(every_s if every_s is not None else HEARTBEAT_S)
         s = fetcher.stats
         log.info(
-            "[%s] in corso: %d richieste, %d in volo, latenza media %.1f s, max %.1f s, codici %s (%.1f min)",
+            "[%s] in progress: %d requests, %d in flight, mean latency %.1f s, max %.1f s, status codes %s (%.1f min)",
             phase, s["requests"], s["in_flight"], s["latency_avg_s"], s["latency_max_s"], s["by_status"], minutes(),
         )  # fmt: skip
 
@@ -192,7 +192,7 @@ async def _scrape_segment(fetcher: Fetcher, seg: SegmentKey, settings: Settings,
     try:
         page1 = TROVACASA.parse_list_page(first.text, slug, contract, 1)
     except Exception:
-        log.warning("pagina elenco non interpretabile (%s/%s, pagina 1)", slug, contract)
+        log.warning("unreadable search-result page (%s/%s, page 1)", slug, contract)
         return SegmentResult(seg, [], None, 1, 1)
     declared = page1.declared_total
     skipped = page1.skipped_cards
@@ -219,22 +219,22 @@ async def _scrape_segment(fetcher: Fetcher, seg: SegmentKey, settings: Settings,
         nonlocal failed, skipped, has_next
         has_next = False  # only a page actually read can lead further (never guess past the end)
         if r is None:
-            failed += 1  # non letta: tempo per gli elenchi scaduto o circuito aperto
+            failed += 1  # not read: search-result time ran out or the circuit opened
             return
         if r.ok:
             try:
                 page = TROVACASA.parse_list_page(r.text, slug, contract, p)
             except Exception:
-                log.warning("pagina elenco non interpretabile (%s/%s, pagina %s)", slug, contract, p)
+                log.warning("unreadable search-result page (%s/%s, page %s)", slug, contract, p)
                 failed += 1
                 return
             cards.extend(page.cards)
             skipped += page.skipped_cards
             has_next = page.has_next
         elif r.status == 404 and r.error is None and p >= n_pages:
-            has_next = False  # fine dell'elenco (l'ultima pagina può sparire se intanto calano gli annunci)
+            has_next = False  # end of the results (the last page can vanish if listings drop meanwhile)
         else:
-            failed += 1  # anche un 404 in mezzo all'elenco: mancherebbero 24 annunci
+            failed += 1  # a 404 mid-results too: 24 listings would be missing
 
     for p, r in zip(pages, await fetch(pages)):
         handle(p, r)
@@ -269,7 +269,7 @@ def _detail_row(d: Detail, city: str, contract: str, run_date: date) -> dict:
 
 
 def _merge(storage: Storage, key: str, df: pl.DataFrame, rerun: bool, scraped: set[SegmentKey]) -> pl.DataFrame:
-    """Su un rerun conserva le righe già scritte oggi per i segmenti non raccolti in questo run."""
+    """On a rerun, keep the rows already written today for the segments not collected in this run."""
     if not rerun:
         return df
     old = read_parquet(storage, key)
@@ -326,10 +326,10 @@ async def _run_daily(
 
     latest = _latest_run_date(storage)
     if latest is not None and run_date < latest and not options.dry_run:
-        raise RunRefused(f"la data {run_date} è precedente all'ultimo run ({latest}): si può rieseguire solo l'ultimo giorno")
+        raise RunRefused(f"the date {run_date} is before the last run ({latest}): only the last day can be rerun")
 
     current = load_state(storage)
-    # La copia dello stato di partenza viene scritta per prima: se esiste, oggi c'è già stato un run.
+    # The copy of the starting state is written first: if it exists, there has already been a run today.
     rerun = storage.read_bytes(_history_key(run_date)) is not None
     prev = _starting_state(current, _read_state(storage, _history_key(run_date)), scraped) if rerun else current
     seg_registry = load_segments(storage)
@@ -340,7 +340,7 @@ async def _run_daily(
     def progress_of(phase: str) -> Callable[[int, int], None]:
         return lambda done, total: log.info("[%s] %d/%d (%.1f min)", phase, done, total, minutes())
 
-    log.info("[avvio] %d segmenti, %d annunci nello stato, rerun=%s", len(segments), len(current), rerun)
+    log.info("[start] %d segments, %d listings in the state, rerun=%s", len(segments), len(current), rerun)
 
     # Search-result and detail pages get separate clients and paces: the site limits search
     # results far more than detail pages (decision 0006).
@@ -357,8 +357,8 @@ async def _run_daily(
     check_site = Fetcher(settings.detail_concurrency, settings, rate_per_s=settings.detail_rate_per_s, transport=transport, clock=clock, sleep=sleep)
     circuit = False
     try:
-        # 1. elenchi
-        beat = asyncio.create_task(_heartbeat(site, "elenchi", minutes))
+        # 1. search results
+        beat = asyncio.create_task(_heartbeat(site, "lists", minutes))
         try:
             list_deadline = t0 + LIST_SHARE * settings.max_runtime_minutes * 60
             seg_results = list(await asyncio.gather(*(_scrape_segment(site, s, settings, list_deadline) for s in segments)))
@@ -371,18 +371,18 @@ async def _run_daily(
         cards: dict[ListingKey, Card] = {}
         for res in seg_results:
             for c in res.cards:
-                cards.setdefault(c.key, c)  # stesso annuncio visto due volte: vale la prima
+                cards.setdefault(c.key, c)  # same listing seen twice: the first one wins
 
-        log.info("[elenchi] %d schede uniche da %d segmenti (%.1f min)", len(cards), len(seg_results), minutes())
+        log.info("[lists] %d unique cards from %d segments (%.1f min)", len(cards), len(seg_results), minutes())
 
-        # 2. completezza dei segmenti
+        # 2. segment completeness
         prev_active = Counter(s.segment for s in prev.values() if s.status == "active")
         seg_report, ok = [], {}
         by_seg = Counter(c.segment for c in cards.values())
         drop_runs: dict[SegmentKey, int] = {}
         for res in seg_results:
             entry = seg_registry.get(res.key) or {}
-            # cali sospetti nei run precedenti (una riesecuzione dello stesso giorno non conta due volte)
+            # suspicious drops in previous runs (a rerun on the same day does not count twice)
             drop_runs[res.key] = (entry.get("drop_runs") or 0) - (1 if entry.get("drop_runs_date") == run_date else 0)
             good, reason = segment_ok(
                 res.declared, by_seg[res.key], res.failed_pages, settings, prev_active[res.key], drop_runs[res.key]
@@ -404,7 +404,7 @@ async def _run_daily(
             if first is None or (run_date - first).days < CENSOR_WINDOW_DAYS:
                 censor.add(s)
 
-        # 3. dettagli
+        # 3. detail pages
         planned: list[DetailTask] = [] if circuit else plan_details(prev, cards, check_segments, settings, run_date)
         # The checks of absent listings answer 404: only a sample, after the photos (decision 0007).
         tasks, check_tasks = split_checks(planned, settings.absence_checks_per_run)
@@ -417,7 +417,7 @@ async def _run_daily(
         gone_samples = 0
 
         def keep_raw(raw: dict, r: FetchResult) -> None:
-            # HTML compresso subito: in memoria ~15 KB per pagina invece di ~170 KB
+            # HTML compressed right away: ~15 KB per page in memory instead of ~170 KB
             html_gz = gzip.compress((r.text or "").encode("utf-8"))
             raw_rows.append(raw | dict(final_url=r.final_url, status=r.status, html_gz=html_gz))
 
@@ -467,11 +467,11 @@ async def _run_daily(
                 if len(error_samples) < 20:
                     error_samples.append(dict(url=t.url, status=r.status, error=r.error))
 
-        log.info("[dettagli] pianificati %d (%.1f min)", len(tasks), minutes())
-        beat = asyncio.create_task(_heartbeat(detail_site, "dettagli", minutes))
+        log.info("[details] planned %d (%.1f min)", len(tasks), minutes())
+        beat = asyncio.create_task(_heartbeat(detail_site, "details", minutes))
         try:
             details_outcome = await _for_each_chunk(
-                detail_site, tasks, lambda t: t.url, False, detail_deadline, handle_detail, progress_of("dettagli")
+                detail_site, tasks, lambda t: t.url, False, detail_deadline, handle_detail, progress_of("details")
             )
         finally:
             beat.cancel()
@@ -482,13 +482,13 @@ async def _run_daily(
             alerts.append("details_stopped_404")  # the rest of the queue carries over to the next day
         attempted = len(tasks) - dstats["skipped_deadline"]
         if dstats["errors"] > max(20, 0.1 * attempted):
-            alerts.append("details_errors")  # molte pagine non scaricate o non riconosciute: sito cambiato o blocco
+            alerts.append("details_errors")  # many pages not downloaded or not recognized: site changed or blocking us
 
-        # 4. stato ed eventi
+        # 4. state and events
         def settle() -> tuple[dict[ListingKey, ListingState], list[Event]]:
             new_state, events = reconcile(prev, cards, details, checks, scraped, ok, censor, run_date)
-            # Un annuncio "cambiato" il cui dettaglio non è arrivato tiene l'impronta vecchia,
-            # così domani risulta ancora cambiato e il dettaglio viene richiesto di nuovo.
+            # A "changed" listing whose detail page did not arrive keeps its old fingerprint,
+            # so tomorrow it still shows as changed and the detail page is requested again.
             for t in tasks:
                 if t.reason == "changed" and t.key not in details and t.key in new_state:
                     new_state[t.key] = new_state[t.key].model_copy(update=dict(last_fingerprint=prev[t.key].last_fingerprint))
@@ -496,7 +496,7 @@ async def _run_daily(
 
         new_state, events = settle()
 
-        # 5. foto
+        # 5. photos
         new_keys = {(e.source, e.listing_id) for e in events if e.type == "new"}
         ptasks = [] if circuit else plan_photos(new_state, cards, new_keys, settings)
         photo_deadline = t0 + PHOTO_SHARE * settings.max_runtime_minutes * 60
@@ -518,11 +518,11 @@ async def _run_daily(
             photo_rows.append(dict(source=p.key[0], listing_id=p.key[1], city=c.city, contract=c.contract, photo_index=p.index,
                                    photo_id=p.photo_id, phash=hashes[0], dhash=hashes[1], run_date=run_date))  # fmt: skip
 
-        log.info("[foto] pianificate %d (%.1f min)", len(ptasks), minutes())
-        beat = asyncio.create_task(_heartbeat(images, "foto", minutes))
+        log.info("[photos] planned %d (%.1f min)", len(ptasks), minutes())
+        beat = asyncio.create_task(_heartbeat(images, "photos", minutes))
         try:
             photos_circuit = await _for_each_chunk(
-                images, ptasks, lambda p: TROVACASA.photo_url(p.photo_id), True, photo_deadline, handle_photo, progress_of("foto")
+                images, ptasks, lambda p: TROVACASA.photo_url(p.photo_id), True, photo_deadline, handle_photo, progress_of("photos")
             )
         finally:
             beat.cancel()
@@ -533,7 +533,7 @@ async def _run_daily(
         # one 404 puts the runner IP in penalty for hours (decision 0007). Their outcome can only
         # add removals, so the state is settled again.
         if check_tasks:
-            log.info("[controlli] pianificati %d (%.1f min)", len(check_tasks), minutes())
+            log.info("[checks] planned %d (%.1f min)", len(check_tasks), minutes())
             await _for_each_chunk(check_site, check_tasks, lambda t: t.url, False, photo_deadline, handle_detail)
             if checks:
                 new_state, events = settle()
@@ -545,7 +545,7 @@ async def _run_daily(
         await check_site.aclose()
         await images.aclose()
 
-    # 6. registro dei segmenti, allarmi
+    # 6. segment registry, alerts
     reasons = {(r["source"], r["city"], r["contract"]): r["reason"] for r in seg_report}
     for s in segments:
         blank = dict(source=s[0], city=s[1], contract=s[2], first_complete_run=None, last_complete_run=None)
@@ -587,14 +587,14 @@ async def _run_daily(
         error_samples=error_samples,
         exit_code=exit_code,
     )
-    log.info("run %s: %s annunci, eventi %s, avvisi %s", run_date, len(cards), report["events"], alerts)
+    log.info("run %s: %s listings, events %s, warnings %s", run_date, len(cards), report["events"], alerts)
 
     if options.dry_run:
         return report
 
-    log.info("[scrittura] inizio (%.1f min)", minutes())
-    # 7. scrittura: copia dello stato di partenza (segna che oggi c'è stato un run) → partizioni
-    #    del giorno → nuovo stato → registro segmenti → report
+    log.info("[write] started (%.1f min)", minutes())
+    # 7. writing: copy of the starting state (marks that a run happened today) → the day's
+    #    partitions → new state → segment registry → report
     if not rerun:
         write_parquet(storage, _history_key(run_date), frames.frame([s.model_dump() for s in current.values()], frames.STATE), version)
     datasets = {
@@ -616,5 +616,5 @@ async def _run_daily(
     storage.write_bytes(_report_key(run_date), json.dumps(report, indent=2, ensure_ascii=False).encode("utf-8"))
     prune_partitions(storage, "raw", settings.raw_retention_days, run_date)
     prune_partitions(storage, "state/history", settings.state_history_days, run_date)
-    log.info("[scrittura] completata (%.1f min)", minutes())
+    log.info("[write] done (%.1f min)", minutes())
     return report

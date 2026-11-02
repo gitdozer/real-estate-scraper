@@ -1,39 +1,39 @@
-# Parametri di esecuzione dello scraper.
-# Ogni valore può essere sovrascritto da riga di comando (vedi docs/runbook.md).
+# Scraper run settings.
+# Any value can be overridden from the command line (see docs/runbook.md).
 
-# --- Rete ---
+# --- Network ---
 list_concurrency: 1          # connections for search-result pages: they are the ones the site limits (decision 0006)
 list_rate_per_s: 0.3         # search-result pages per second: the old scraper's proven pace (0.5/s stalled after ~750 pages)
 detail_concurrency: 2        # connections for detail pages
 detail_rate_per_s: 1.5       # detail pages per second: 3,985 pages in 45 minutes without errors at this pace (probe of 2026-10-30)
-image_concurrency: 1         # connessioni contemporanee verso il server delle foto (prudenza, vedi sopra)
-image_rate_per_s: 4.0        # ritmo massimo verso il server delle foto (richieste/s)
-max_retries: 4               # tentativi massimi per richiesta (errori di rete, 5xx, 429)
-timeout_s: 30.0              # timeout di una singola richiesta, in secondi
-error_window: 200            # richieste considerate per misurare il tasso di errori
-error_threshold: 0.2         # oltre questo tasso di errori la concorrenza si dimezza
+image_concurrency: 1         # concurrent connections to the photo server (caution, see above)
+image_rate_per_s: 4.0        # maximum rate to the photo server (requests/s)
+max_retries: 4               # maximum attempts per request (network errors, 5xx, 429)
+timeout_s: 30.0              # timeout of a single request, in seconds
+error_window: 200            # requests considered when measuring the error rate
+error_threshold: 0.2         # above this error rate, concurrency is halved
 
-# --- Dettagli e foto ---
-rotation_days: 7             # ogni annuncio riceve un dettaglio aggiornato almeno ogni N giorni
-photos_new: 6                # foto con impronta per gli annunci nuovi
-photos_backlog: 3            # foto con impronta per gli annunci arretrati (es. bootstrap)
-max_photos_per_run: 30000    # tetto di foto scaricate in un run
+# --- Detail pages and photos ---
+rotation_days: 7             # every listing gets a fresh detail page at least every N days
+photos_new: 6                # fingerprinted photos for new listings
+photos_backlog: 3            # fingerprinted photos for backlog listings (e.g. bootstrap)
+max_photos_per_run: 30000    # cap on photos downloaded in one run
 
-# --- Controlli di qualità ---
-completeness_min: 0.97       # quota minima di annunci raccolti rispetto al totale dichiarato dal sito
-small_segment_threshold: 50  # sotto questo totale dichiarato si usa una soglia assoluta...
-small_segment_max_missing: 2 # ...cioè al massimo questi annunci mancanti
-active_drop_alert: 0.05      # allarme se gli annunci attivi calano più di questa quota rispetto al run precedente
-drop_confirm_runs: 3         # un calo sospetto di un segmento si accetta come reale dopo questi run consecutivi
-delisted_recheck_days: 7     # ogni quanti giorni ricontrollare il dettaglio di un annuncio "delisted"
+# --- Quality checks ---
+completeness_min: 0.97       # minimum share of listings collected vs the total the site declares
+small_segment_threshold: 50  # below this declared total an absolute threshold applies...
+small_segment_max_missing: 2 # ...i.e. at most this many missing listings
+active_drop_alert: 0.05      # alert if active listings drop by more than this share vs the previous run
+drop_confirm_runs: 3         # a suspicious segment drop is accepted as real after this many consecutive runs
+delisted_recheck_days: 7     # how often (days) to recheck the detail page of a "delisted" listing
 absence_checks_per_run: 1    # detail-page checks of absent listings per run, made after everything else: a missing listing answers 404 and one 404 puts the runner IP in penalty for hours (decision 0007)
 
-# --- Conservazione ---
-raw_retention_days: 90       # giorni di conservazione dell'HTML grezzo
-raw_max_per_run: 3000        # pagine HTML grezze (nuovi/cambiati) conservate per run: limita memoria e spazio
-state_history_days: 30       # giorni di conservazione delle copie dello stato
+# --- Retention ---
+raw_retention_days: 90       # days to keep raw HTML
+raw_max_per_run: 3000        # raw HTML pages (new/changed) kept per run: caps memory and storage
+state_history_days: 30       # days to keep state backups
 
-# --- Esecuzione ---
-max_runtime_minutes: 330     # maximum run duration (the job limit is 350); work not done moves to the next day. At 0.5 req/s the lists take ~1 hour
-full_details: false          # true = scarica il dettaglio di tutti gli annunci
-max_pages: 0                 # 0 = tutte le pagine; >0 solo per test (blocca le scomparse)
+# --- Run ---
+max_runtime_minutes: 330     # maximum run duration (the job limit is 350); work not done moves to the next day. At 0.3 req/s the search results take ~90 minutes
+full_details: false          # true = download the detail page of every listing
+max_pages: 0                 # 0 = all pages; >0 for tests only (blocks disappearances)

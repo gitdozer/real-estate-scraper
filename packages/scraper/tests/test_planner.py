@@ -20,7 +20,7 @@ def plan(prev=(), cards=(), scraped=(SEG,), settings=S, day=DAY):
 
 
 def fresh(listing_id, **kw):
-    """Stato attivo coerente con card(listing_id): impronta uguale, dettaglio di ieri."""
+    """Active state consistent with card(listing_id): same fingerprint, detail page from yesterday."""
     c = card(listing_id)
     base = dict(last_fingerprint=card_fingerprint(c), last_detail_date=DAY - timedelta(days=1))
     base.update(kw)
@@ -116,7 +116,7 @@ def test_rotation_handles_non_numeric_ids():
     assert reasons(tasks) == {"abc": "rotation"}
 
 
-# --- foto ---------------------------------------------------------------------
+# --- photos -------------------------------------------------------------------
 
 PH = Settings(photos_new=6, photos_backlog=3, max_photos_per_run=30000)
 
@@ -145,7 +145,7 @@ def test_plan_photos_backlog_oldest_first_and_cap():
     )
     cards = by_key(*(card(i, photo_ids=photos(i, 5)) for i in ("1", "2", "3")))
     tasks = plan_photos(st, cards, set(), Settings(photos_backlog=3, max_photos_per_run=4))
-    assert [t.key[1] for t in tasks] == ["2", "2", "2"]  # solo annunci interi entro il tetto
+    assert [t.key[1] for t in tasks] == ["2", "2", "2"]  # only whole listings within the cap
 
 
 def test_plan_photos_redone_when_photo_list_changes():

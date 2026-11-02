@@ -1,4 +1,4 @@
-"""Comando di diagnosi: misura quante richieste il sito accetta a ritmi diversi."""
+"""Probe command: measures how many requests the site accepts at different rates."""
 
 import logging
 
@@ -30,7 +30,7 @@ async def test_probe_paces_requests_and_reports_per_minute(caplog):
 
     result = await run_probe(
         [f"https://www.trovacasa.it/case-in-vendita/milano?page={i}" for i in range(2, 400)],
-        phases=[(1.0, 2.0), (2.0, 1.0)],  # (richieste al secondo, minuti)
+        phases=[(1.0, 2.0), (2.0, 1.0)],  # (requests per second, minutes)
         settings=Settings(),
         transport=httpx.MockTransport(handler),
         clock=t.clock,

@@ -1,6 +1,6 @@
-"""HTML sintetico con la stessa struttura di trovacasa.it, per i test.
+"""Synthetic HTML with the same structure as trovacasa.it, for the tests.
 
-Riproduce solo gli elementi che il parser legge (vedi docs/sources/trovacasa.md).
+It reproduces only the elements the parser reads (see docs/sources/trovacasa.md).
 """
 
 from html import escape
@@ -90,11 +90,11 @@ CITY_NAMES = {"milano": "Milano", "monza": "Monza", "marnate": "Marnate"}
 
 
 class FakeSite:
-    """Sito trovacasa simulato per i test della pipeline.
+    """Simulated trovacasa site for the pipeline tests.
 
-    listings[(slug, contract)] = lista di ID visibili negli elenchi (in ordine).
-    alive = ID la cui pagina di dettaglio risponde 200 anche se non sono negli elenchi.
-    Tutti gli altri ID rispondono 404 sul dettaglio.
+    listings[(slug, contract)] = IDs visible in the search results (in order).
+    alive = IDs whose detail page answers 200 even though they are not in the search results.
+    Every other ID answers 404 on its detail page.
     """
 
     def __init__(self):
@@ -104,7 +104,7 @@ class FakeSite:
         self.failing_pages: set[tuple[str, str, int]] = set()
         self.declared_override: dict[tuple[str, str], int] = {}
         self.extra_on_page: dict[tuple[str, str, int], list[str]] = {}
-        self.missing_pages: set[tuple[str, str, int]] = set()  # pagine che rispondono 404
+        self.missing_pages: set[tuple[str, str, int]] = set()  # pages that answer 404
         self.dead: set[str] = set()  # IDs visible in the lists whose detail page answers 404 anyway
         self.requests: list[str] = []
 

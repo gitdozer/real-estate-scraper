@@ -1,4 +1,4 @@
-# Test automatici a ogni push e pull request.
+# Automated tests on every push and pull request.
 name: Test
 
 on:
@@ -15,7 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e  # v10.3.2
-      - name: Installa le dipendenze
+      - name: Install dependencies
         run: uv sync --locked --package scraper
-      - name: Esegui i test
+      - name: Run tests
         run: uv run pytest -q
