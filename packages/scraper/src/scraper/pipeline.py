@@ -12,6 +12,7 @@ Flusso e garanzie in docs/architecture.md. Punti chiave:
 """
 
 import asyncio
+import faulthandler
 import gzip
 import json
 import logging
@@ -48,6 +49,8 @@ CENSOR_WINDOW_DAYS = 7  # annunci "nuovi" nei primi giorni di un segmento: proba
 RAW_GONE_SAMPLES = 50  # pagine di controlli 404/redirect conservate per capire come il sito mostra un annuncio rimosso
 DETAIL_SHARE = 0.75  # details stop here, leaving photos at least 15% of the runtime (they had ~5%, 2026-11-01)
 PHOTO_SHARE = 0.90  # photos stop here; the rest is for writing
+HEARTBEAT_S = 60.0  # heartbeat interval during the network phases
+STACK_DUMP_GRACE_S = 600  # a run still alive this long after the photo deadline is stuck: dump the stacks
 LIST_SHARE = 0.40  # quota del tempo massimo per gli elenchi: oltre, le pagine non lette contano come fallite
 MAX_EXTRA_PAGES = 5  # pages followed through "next" links past the declared total (listings shifted during the run)
 CHUNK = 500  # richieste per blocco: un'interruzione (scadenza, circuito) non fa perdere i blocchi già fatti
@@ -165,11 +168,11 @@ async def _for_each_chunk(
     return False
 
 
-async def _heartbeat(fetcher: Fetcher, phase: str, minutes: Callable[[], float], every_s: float = 60.0) -> None:
+async def _heartbeat(fetcher: Fetcher, phase: str, minutes: Callable[[], float], every_s: float | None = None) -> None:
     """Battito periodico durante una fase lunga: se il run si blocca, il log dice dove e come.
     Solo conteggi e latenze, nessun dato degli annunci."""
     while True:
-        await asyncio.sleep(every_s)
+        await asyncio.sleep(every_s if every_s is not None else HEARTBEAT_S)
         s = fetcher.stats
         log.info(
             "[%s] in corso: %d richieste, %d in volo, latenza media %.1f s, max %.1f s, codici %s (%.1f min)",
@@ -282,6 +285,25 @@ def _merge(storage: Storage, key: str, df: pl.DataFrame, rerun: bool, scraped: s
 
 
 async def run_daily(
+    storage: Storage,
+    cities: list[City],
+    settings: Settings,
+    options: RunOptions,
+    transport: httpx.AsyncBaseTransport | None = None,
+    clock=time.monotonic,
+    sleep=asyncio.sleep,
+) -> dict:
+    """Runs the daily collection. If the process is still alive well after the photo deadline it
+    is stuck somewhere: Python then prints every stack to the log (code locations only, no
+    listing data), so the next diagnosis does not start blind (2026-11-02/03)."""
+    faulthandler.dump_traceback_later(PHOTO_SHARE * settings.max_runtime_minutes * 60 + STACK_DUMP_GRACE_S, exit=False)
+    try:
+        return await _run_daily(storage, cities, settings, options, transport=transport, clock=clock, sleep=sleep)
+    finally:
+        faulthandler.cancel_dump_traceback_later()
+
+
+async def _run_daily(
     storage: Storage,
     cities: list[City],
     settings: Settings,
@@ -437,7 +459,14 @@ async def run_daily(
                     error_samples.append(dict(url=t.url, status=r.status, error=r.error))
 
         log.info("[dettagli] pianificati %d (%.1f min)", len(tasks), minutes())
-        if await _for_each_chunk(detail_site, tasks, lambda t: t.url, False, detail_deadline, handle_detail, progress_of("dettagli")):
+        beat = asyncio.create_task(_heartbeat(detail_site, "dettagli", minutes))
+        try:
+            details_circuit = await _for_each_chunk(
+                detail_site, tasks, lambda t: t.url, False, detail_deadline, handle_detail, progress_of("dettagli")
+            )
+        finally:
+            beat.cancel()
+        if details_circuit:
             circuit = True
             alerts.append("circuit_open_details")
         attempted = len(tasks) - dstats["skipped_deadline"]
@@ -475,9 +504,14 @@ async def run_daily(
                                    photo_id=p.photo_id, phash=hashes[0], dhash=hashes[1], run_date=run_date))  # fmt: skip
 
         log.info("[foto] pianificate %d (%.1f min)", len(ptasks), minutes())
-        if await _for_each_chunk(
-            images, ptasks, lambda p: TROVACASA.photo_url(p.photo_id), True, photo_deadline, handle_photo, progress_of("foto")
-        ):
+        beat = asyncio.create_task(_heartbeat(images, "foto", minutes))
+        try:
+            photos_circuit = await _for_each_chunk(
+                images, ptasks, lambda p: TROVACASA.photo_url(p.photo_id), True, photo_deadline, handle_photo, progress_of("foto")
+            )
+        finally:
+            beat.cancel()
+        if photos_circuit:
             alerts.append("circuit_open_photos")
         for key, n in hashed.items():
             new_state[key] = new_state[key].model_copy(update=dict(photos_done=n, photo_ids_hash=photo_ids_hash(cards[key].photo_ids)))

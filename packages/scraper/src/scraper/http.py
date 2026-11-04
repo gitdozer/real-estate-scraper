@@ -199,10 +199,17 @@ class Fetcher:
                 self._counts["requests"] += 1
                 started = self._clock()
                 try:
-                    resp = await self._client.get(url)
+                    # httpx's timeout applies between bytes, not to the whole request: a response
+                    # that never completes kept the details phase stuck until GitHub cancelled the
+                    # job (2026-11-02/03). The total limit turns it into an ordinary failed attempt.
+                    resp = await asyncio.wait_for(self._client.get(url), timeout=2 * self._settings.timeout_s)
                 except httpx.HTTPError as exc:
                     self._note_latency(started)
                     status, final_url, error = None, None, type(exc).__name__
+                    self._by_status[error] += 1
+                except TimeoutError:
+                    self._note_latency(started)
+                    status, final_url, error = None, None, "total_timeout"
                     self._by_status[error] += 1
                 else:
                     self._note_latency(started)

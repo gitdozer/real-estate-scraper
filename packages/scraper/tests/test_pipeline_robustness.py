@@ -4,7 +4,7 @@ import json
 from datetime import timedelta
 
 import pytest
-from test_pipeline import D1, D2, D3, MONZA, events, run, site, st, storage  # noqa: F401 (fixture)
+from test_pipeline import D1, D2, D3, MILANO, MONZA, SET, events, run, site, st, storage  # noqa: F401 (fixture)
 
 from scraper.config import Settings
 from scraper.pipeline import RunRefused
@@ -218,3 +218,73 @@ async def test_failed_page_reached_through_next_link_records_no_disappearances(s
     report = await run(site, storage, D2)
     assert "segments_not_ok" in report["alerts"]
     assert all(s.status == "active" for s in st(storage).values())
+
+
+def _hanging(site, hung_ids):
+    """Fake-site handler whose detail pages for `hung_ids` never answer."""
+    import asyncio
+
+    async def handler(request):
+        if "/annunci/" in request.url.path and request.url.path.rsplit("-", 1)[-1] in hung_ids:
+            await asyncio.sleep(3600)
+        return site.handler(request)
+
+    return handler
+
+
+async def test_a_hanging_detail_page_does_not_block_the_run(site, storage):
+    import asyncio
+
+    import httpx
+
+    from scraper.pipeline import RunOptions, run_daily
+
+    async def instant(_s):
+        return None
+
+    await run(site, storage, D1)
+    site.listings[("milano", "vendita")].remove("7")  # absence check on a page that never answers
+    settings = Settings(max_retries=1, timeout_s=0.05)
+    report = await asyncio.wait_for(
+        run_daily(storage, [MILANO], settings, RunOptions(run_date=D2), transport=httpx.MockTransport(_hanging(site, {"7"})), sleep=instant),
+        timeout=30,
+    )
+    assert report["details"]["errors"] >= 1
+    assert st(storage)[("trovacasa", "7")].status == "active"  # an unanswered check is not a removal
+    assert report["events"].get("removed", 0) == 0
+
+
+async def test_heartbeat_runs_during_the_details_phase(site, storage, caplog, monkeypatch):
+    import asyncio
+    import logging
+
+    import httpx
+
+    import scraper.pipeline as pipeline
+    from scraper.pipeline import RunOptions, run_daily
+
+    caplog.set_level(logging.INFO, logger="scraper")
+    monkeypatch.setattr(pipeline, "HEARTBEAT_S", 0.01)
+
+    async def slow(request):
+        if "/annunci/" in request.url.path:
+            await asyncio.sleep(0.03)
+        return site.handler(request)
+
+    async def instant(_s):
+        return None
+
+    await run_daily(storage, [MILANO], Settings(max_retries=1), RunOptions(run_date=D1), transport=httpx.MockTransport(slow), sleep=instant)
+    assert any("[dettagli] in corso" in r.getMessage() for r in caplog.records)
+
+
+async def test_stack_dump_is_armed_for_a_stuck_run_and_disarmed_at_the_end(site, storage, monkeypatch):
+    import scraper.pipeline as pipeline
+
+    calls = []
+    monkeypatch.setattr(pipeline.faulthandler, "dump_traceback_later", lambda timeout, **kw: calls.append(("arm", timeout)))
+    monkeypatch.setattr(pipeline.faulthandler, "cancel_dump_traceback_later", lambda: calls.append(("disarm", None)))
+    await run(site, storage, D1)
+    assert calls[0][0] == "arm" and calls[-1][0] == "disarm"
+    # after the photo deadline (90%) but before GitHub's job limit
+    assert 0.90 * SET.max_runtime_minutes * 60 < calls[0][1] < SET.max_runtime_minutes * 60 + 15 * 60

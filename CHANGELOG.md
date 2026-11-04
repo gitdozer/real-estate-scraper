@@ -4,6 +4,10 @@ Changes per component. Versions follow [SemVer](https://semver.org/), with tags 
 
 ## scraper
 
+### 0.1.6 — 2026-11-04
+- Every request has a total limit of 2 × `timeout_s`: a response that never completes becomes a failed attempt (`total_timeout`) instead of blocking its batch. On 2026-11-02 and 11-03 such a request kept the details phase stuck until GitHub cancelled the job, and nothing was written for those days.
+- Heartbeat in the detail and photo phases too; Python stacks printed to the log if a run is still alive 10 minutes after the photo deadline.
+
 ### 0.1.5 — 2026-11-02
 - Brake release: after a window of requests with at most 5% failures, concurrency and pace go back up one step, never beyond the configured values (a short burst of 503s used to halve the detail pace for the rest of the run).
 - Detail pages stop at 75% of the maximum runtime instead of 85%, so photos get ~50 minutes per run instead of ~17 while there is a backlog. Search-result pages are unchanged.

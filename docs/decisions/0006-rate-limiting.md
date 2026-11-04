@@ -85,3 +85,5 @@ At 0.5 req/s from search-result page 600: from minute 3 to 9 the valid Milano sa
 
 ## Outcome (2026-11-01)
 The first two runs with 0.1.4 (2026-10-31 and 2026-11-01) read **all 1,579 search-result pages in 87.8 minutes with 0 errors**, the first full collections ever from GitHub; 13 and then 14 of 16 segments were complete. Detail pages ran at ~1.47 req/s until a short burst of 503s and timeouts made the brake halve the pace to ~0.72 req/s for the rest of the run, which never recovers (~9,500 detail pages per run instead of ~13,000). The detail backlog empties in ~2 more runs; the photos, with ~17 minutes per run, are the slowest part.
+
+**2026-11-04:** the runs of 2026-11-02 and 11-03 read all search results without errors but then stayed stuck in the details phase until GitHub cancelled them: not a rate problem, but a request that never completed and blocked its batch. Since 0.1.6 every request has a total limit (2 × `timeout_s`).

@@ -95,6 +95,8 @@ During the first 7 days of a new municipality its listings are flagged `first_se
 
 Open the run on GitHub Actions: the summary shows which check failed.
 
+**Run cancelled by GitHub ("The operation was canceled", ~350 minutes)** — nothing was written for that day. Look at the last heartbeat lines (`[elenchi|dettagli|foto] in corso`) to see which phase stopped, and for a `Timeout (0:...)!` block with Python stacks printed near the end: it shows the line where the run was stuck. Rerun the day only if it is still the last one.
+
 | Warning | Meaning | What to do |
 |---|---|---|
 | `segments_not_ok` with `failed_pages` | some result pages could not be downloaded even after retries | usually a temporary problem on the site: rerun (even just for those municipalities). No disappearances were recorded for those municipalities |

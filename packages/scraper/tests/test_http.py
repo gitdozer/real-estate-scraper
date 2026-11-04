@@ -139,3 +139,22 @@ async def test_retries_stop_at_deadline():
     results = await f.get_many(["https://www.trovacasa.it/a"], deadline=10.0)
     assert len(calls) == 1  # first attempt started before the deadline, no retry after it
     assert results[0] is not None and not results[0].ok  # attempted and failed: not "skipped"
+
+
+async def test_a_response_that_never_ends_becomes_an_error():
+    # 2026-11-02/03: the details phase stopped for 4.5 hours until GitHub cancelled the job.
+    # httpx's timeout applies between bytes, not to the whole request: a response that never
+    # completes must still end, as an error, within a total limit (2 x timeout_s).
+    import asyncio
+
+    calls = []
+
+    async def handler(request):
+        calls.append(request)
+        await asyncio.sleep(3600)
+
+    f = Fetcher(1, Settings(timeout_s=0.05, max_retries=2), transport=httpx.MockTransport(handler), sleep=FakeSleep())
+    r = await asyncio.wait_for(f.get("https://www.trovacasa.it/annunci/x-1"), timeout=5)
+    assert not r.ok and r.error == "total_timeout"
+    assert len(calls) == 2  # retried like any other timeout
+    assert f.stats["by_status"]["total_timeout"] == 2
