@@ -19,7 +19,14 @@ class Time:
 
 
 async def test_rate_limit_spaces_request_starts():
-    t = Time()
+    import asyncio
+
+    class YieldingTime(Time):
+        async def sleep(self, s):  # like asyncio.sleep, the backoff lets the other requests run
+            self.now += s
+            await asyncio.sleep(0)
+
+    t = YieldingTime()
     starts = []
 
     def handler(request):
@@ -105,3 +112,29 @@ async def test_brake_is_not_released_while_errors_go_on():
     await _drive(f, [True] * 5)
     await _drive(f, [False, False, True, False, False] * 4)
     assert (f.stats["concurrency_now"], f.stats["rate_now"]) == (1, 0.75)
+
+
+async def test_no_request_starts_after_the_deadline_even_for_queued_retries():
+    # 2026-11-04/07: detail pages all timed out; after the deadline every request queued for
+    # its 2nd-4th attempt still made one more 30 s attempt, so the phase never ended and GitHub
+    # cancelled the job before anything was written.
+    import asyncio
+
+    class YieldingTime(Time):
+        async def sleep(self, s):  # like asyncio.sleep, the backoff lets the other requests run
+            self.now += s
+            await asyncio.sleep(0)
+
+    t = YieldingTime()
+    starts = []
+
+    def handler(request):
+        starts.append(t.now)
+        t.now += 30.0  # each attempt hangs until the timeout
+        raise httpx.ReadTimeout("hang", request=request)
+
+    f = Fetcher(1, Settings(max_retries=4, error_window=10_000), rate_per_s=0,
+                transport=httpx.MockTransport(handler), sleep=t.sleep, clock=t.clock)  # fmt: skip
+    results = await f.get_many([f"https://www.trovacasa.it/annunci/x-{i}" for i in range(50)], deadline=300.0)
+    assert starts and max(starts) < 300.0  # nothing starts at or after the deadline
+    assert all(r is None or not r.ok for r in results)

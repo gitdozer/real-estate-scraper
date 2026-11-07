@@ -192,10 +192,15 @@ class Fetcher:
                 raise CircuitOpen(url)
             retry_after: float | None = None
             async with self._slot():
-                if attempt == 1 and deadline is not None and self._clock() >= deadline:
-                    return None
-                attempts = attempt
                 await self._pace()
+                # Checked right before EVERY attempt, after waiting for a slot and for the pace:
+                # retries queued behind other requests used to start after the deadline, one 30 s
+                # timeout each, and the phase never ended (2026-11-04/07).
+                if deadline is not None and self._clock() >= deadline:
+                    if attempt == 1:
+                        return None  # never attempted: skipped, it stays in the queue for tomorrow
+                    break  # already attempted: it counts as failed
+                attempts = attempt
                 self._counts["requests"] += 1
                 started = self._clock()
                 try:

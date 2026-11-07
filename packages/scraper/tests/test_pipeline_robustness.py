@@ -288,3 +288,36 @@ async def test_stack_dump_is_armed_for_a_stuck_run_and_disarmed_at_the_end(site,
     assert calls[0][0] == "arm" and calls[-1][0] == "disarm"
     # after the photo deadline (90%) but before GitHub's job limit
     assert 0.90 * SET.max_runtime_minutes * 60 < calls[0][1] < SET.max_runtime_minutes * 60 + 15 * 60
+
+
+async def test_run_still_writes_when_every_detail_page_times_out(site, storage):
+    # The search results are fine but every detail page hangs until the timeout: the run must
+    # stop at its deadlines and write what it has, recording no disappearances.
+    import httpx
+
+    from scraper.pipeline import RunOptions, run_daily
+    from scraper.storage import partition_key, read_parquet
+
+    await run(site, storage, D1)
+    site.listings[("milano", "vendita")].remove("9")
+    now = [0.0]
+
+    async def sleep(s):
+        import asyncio
+
+        now[0] += s
+        await asyncio.sleep(0)  # like asyncio.sleep, the backoff lets the other requests run
+
+    def handler(request):
+        if "www.trovacasa.it/annunci/" in str(request.url):
+            now[0] += 30.0
+            raise httpx.ReadTimeout("hang", request=request)
+        return site.handler(request)
+
+    settings = Settings(max_retries=4, max_runtime_minutes=10)
+    report = await run_daily(storage, [MILANO], settings, RunOptions(run_date=D2), transport=httpx.MockTransport(handler),
+                             clock=lambda: now[0], sleep=sleep)  # fmt: skip
+    assert now[0] < settings.max_runtime_minutes * 60  # finished within the run's own budget
+    assert read_parquet(storage, partition_key("observations", D2)) is not None  # the day was written
+    assert report["events"].get("removed", 0) == 0
+    assert st(storage)[("trovacasa", "9")].status == "active"

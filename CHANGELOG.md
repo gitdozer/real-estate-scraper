@@ -4,6 +4,9 @@ Changes per component. Versions follow [SemVer](https://semver.org/), with tags 
 
 ## scraper
 
+### 0.1.7 — 2026-11-07
+- The phase deadline is checked right before every attempt, not only before the first one: when every detail page timed out, retries queued behind other requests kept starting after the deadline (one 30 s timeout each), the phase never ended and GitHub cancelled the job before anything was written (2026-11-04 → 11-07).
+
 ### 0.1.6 — 2026-11-04
 - Every request has a total limit of 2 × `timeout_s`: a response that never completes becomes a failed attempt (`total_timeout`) instead of blocking its batch. On 2026-11-02 and 11-03 such a request kept the details phase stuck until GitHub cancelled the job, and nothing was written for those days.
 - Heartbeat in the detail and photo phases too; Python stacks printed to the log if a run is still alive 10 minutes after the photo deadline.
