@@ -86,6 +86,28 @@ def test_probe_detail_kind_harvests_urls_then_probes_them(monkeypatch, capsys):
     assert "detail pages, 2 connection(s)" in capsys.readouterr().out
 
 
+def test_probe_detail_kind_can_start_with_requests_for_missing_listings(monkeypatch):
+    # Reproduces the daily run's detail phase, which starts with absence checks (404s):
+    # `--dead-first N` puts N detail URLs with non-existent ids before the harvested ones.
+    import scraper.probe as probe
+
+    seen = {}
+
+    async def fake_harvest(list_urls, city, contract, rate, settings, **kw):
+        return ["https://www.trovacasa.it/annunci/mi-tc-1-10", "https://www.trovacasa.it/annunci/mi-tc-2-20"], {}
+
+    async def fake_probe(urls, phases, settings, concurrency=1, **kw):
+        seen["urls"] = urls
+        return [{"rate": 1.5, "minutes": 1, "requests": 0, "ok": 0, "timeouts": 0, "latency_avg_s": 0}]
+
+    monkeypatch.setattr(probe, "harvest_detail_urls", fake_harvest)
+    monkeypatch.setattr(probe, "run_probe", fake_probe)
+    monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
+    assert main(["probe", "--kind", "detail", "--harvest-pages", "1", "--dead-first", "3", "--phases", "1.5:1"]) == 0
+    assert seen["urls"][3:] == ["https://www.trovacasa.it/annunci/mi-tc-1-10", "https://www.trovacasa.it/annunci/mi-tc-2-20"]
+    assert seen["urls"][:3] == probe.missing_detail_urls(seen["urls"][3:], 3)
+
+
 def test_probe_list_kind_can_start_from_a_given_page(monkeypatch):
     # Used to reach the end of the search results quickly (hypothesis: a request beyond the
     # last page, answered with 404, makes the site penalise the IP).

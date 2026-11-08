@@ -154,3 +154,32 @@ async def test_harvest_detail_urls_from_list_pages():
     assert all(u.startswith("https://www.trovacasa.it/annunci/") for u in urls)
     assert counts == {"pages": 4, "ok": 3, "failed": 1}
     assert all(b - a >= 2.0 for a, b in zip(starts, starts[1:]))  # one list page every 2 s at most
+
+
+def test_missing_detail_urls_keeps_the_site_and_agency_but_uses_ids_that_do_not_exist():
+    # Hypothesis of 2026-11-08: the daily run's detail phase starts with absence checks
+    # (listings gone from the search results, answered 404) and every failed run stalled
+    # right after that burst of 404s. The probe reproduces the burst with made-up listing
+    # ids: the site answers 404 for an unknown id exactly as for a removed listing.
+    from scraper.probe import missing_detail_urls
+
+    harvested = [
+        "https://www.trovacasa.it/annunci/mi-tc-64698-74085984",
+        "https://www.trovacasa.it/annunci/mi-tc-78833-74085991/",
+        "https://www.trovacasa.it/annunci/mi-tc-1-5",
+    ]
+    dead = missing_detail_urls(harvested, 2)
+    assert dead == [
+        "https://www.trovacasa.it/annunci/mi-tc-64698-900000001",
+        "https://www.trovacasa.it/annunci/mi-tc-78833-900000002",
+    ]
+    assert not set(dead) & set(harvested)
+
+
+def test_missing_detail_urls_handles_more_requests_than_harvested_urls():
+    from scraper.probe import missing_detail_urls
+
+    dead = missing_detail_urls(["https://www.trovacasa.it/annunci/mi-tc-7-8"], 3)
+    assert len(dead) == len(set(dead)) == 3
+    assert all(u.startswith("https://www.trovacasa.it/annunci/mi-tc-7-9000000") for u in dead)
+    assert missing_detail_urls([], 3) == []

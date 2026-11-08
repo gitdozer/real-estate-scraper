@@ -17,6 +17,7 @@ stalled, while search-result pages stall above ~0.5 req/s: the limits may differ
 
 import asyncio
 import logging
+import re
 import time
 from collections import Counter
 from collections.abc import Awaitable, Callable
@@ -116,6 +117,26 @@ async def run_probe(
             if exhausted:
                 break
     return results
+
+
+_LISTING_ID = re.compile(r"^(.*-)(\d+)/?$")
+_MISSING_ID_BASE = 900_000_000  # far above any listing id seen so far (~74 million in 2026-11)
+
+
+def missing_detail_urls(harvested: list[str], n: int) -> list[str]:
+    """`n` detail URLs for listings that do not exist (the site answers 404, like for a
+    removed listing). Built from harvested URLs by replacing the listing id, so that the
+    host, path and agency part are real. The daily run's detail phase starts with absence
+    checks, i.e. such 404s; this reproduces that burst in the probe (2026-11-08)."""
+    if not harvested:
+        return []
+    urls = []
+    for k in range(n):
+        m = _LISTING_ID.match(harvested[k % len(harvested)])
+        if m is None:
+            continue
+        urls.append(f"{m.group(1)}{_MISSING_ID_BASE + k + 1}")
+    return urls
 
 
 async def harvest_detail_urls(

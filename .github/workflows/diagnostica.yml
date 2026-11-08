@@ -23,6 +23,10 @@ on:
         description: "List kind: first search-result page to request"
         type: string
         default: "1"
+      dead_first:
+        description: "Detail kind: requests for non-existent listings (404) before the valid detail pages"
+        type: string
+        default: "0"
 
 permissions:
   contents: read
@@ -42,4 +46,5 @@ jobs:
           IN_KIND: ${{ inputs.kind }}
           IN_CONCURRENCY: ${{ inputs.concurrency }}
           IN_FIRST_PAGE: ${{ inputs.first_page }}
-        run: uv run --no-dev python -m scraper probe --phases "$IN_PHASES" --kind "$IN_KIND" --concurrency "$IN_CONCURRENCY" --first-page "$IN_FIRST_PAGE"
+          IN_DEAD_FIRST: ${{ inputs.dead_first }}
+        run: uv run --no-dev python -m scraper probe --phases "$IN_PHASES" --kind "$IN_KIND" --concurrency "$IN_CONCURRENCY" --first-page "$IN_FIRST_PAGE" --dead-first "$IN_DEAD_FIRST"
