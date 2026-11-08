@@ -129,15 +129,15 @@ Path: `state/listings.parquet` (overwritten at the end of each run). The states 
 | `source`, `listing_id` | str | listing key |
 | `city`, `contract` | str | segment in which the listing was last seen |
 | `url` | str | URL of the detail page |
-| `status` | str | `active`, `delisted` (gone from the search results, but the page is still online), `removed` (page returns 404/410) |
+| `status` | str | `active`, `delisted` (absent from two consecutive complete collections of its segment — the usual terminal state since 0.1.9), `removed` (a sampled detail-page check returned 404/410) |
 | `in_scope`, `exclusion_reason`, `flags` | | scope, as in `observations` |
 | `first_seen` | date | first day the listing was seen |
 | `spell_start` | date | start of the current spell (= `first_seen`, or the day of the most recent reappearance) |
 | `first_seen_censored` | bool | the listing was already online on the segment's first collection day (or in the imported historical data): its real start date is earlier |
 | `list_last_seen` | date | last day the listing was seen in the search results — **the end date used for time to sell** |
 | `absent_since` | date? | first day of the current absence (null if the listing is present) |
-| `missing_streak` | int | number of checks that returned 200 during the current absence |
-| `delisted_date` | date? | first day of the confirmed absence (confirmed by a conclusive check result) |
+| `missing_streak` | int | number of consecutive complete collections without the listing during the current absence (until 0.1.8: number of checks that returned 200) |
+| `delisted_date` | date? | first day of the confirmed absence (confirmed by the second complete collection without the listing, or by a 404) |
 | `detail_gone_date` | date? | first day the detail page returned 404/410 |
 | `last_check_date` | date? | most recent detail-page check during an absence |
 | `last_fingerprint` | str? | fingerprint of the last listing card seen |

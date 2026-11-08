@@ -1,6 +1,6 @@
 # 0005 — Gone means sold, with separate dates
 
-Date: 2026-10-25 · Status: accepted
+Date: 2026-10-25 · Status: accepted; revised by [0008](0008-disappearance-from-list-evidence.md) (2026-11-08): the absence is confirmed by two consecutive complete collections, the detail-page check is a sampled confirmation only
 
 ## Context
 There is no public data on actual property sales. The user's direct experience (they are house-hunting) is that the time a listing stays online is a good approximation of the time to sell. The "venduto" (sold) / "in trattativa" (under negotiation) labels that agencies sometimes add are too rare to be useful. The common case we must handle is **re-listing**: a listing is taken down and published again under a new ID so that it looks new.
@@ -11,7 +11,7 @@ There is no public data on actual property sales. The user's direct experience (
   - `list_last_seen` — the last day the listing appeared in the search results: **this is the end date used for the time to sell**;
   - `delisted_date` — the first day of confirmed absence;
   - `detail_gone_date` — the first day the detail page returns 404.
-- An absence is confirmed only if the collection for that segment was complete; a network error never decides anything.
+- An absence is confirmed only if the collection for that segment was complete; a network error never decides anything. *(Since 0008: two consecutive complete collections without the listing confirm it; a detail-page 404, when a sampled check is made, confirms it at once.)*
 - From day one we collect the signals needed to recognize re-listings after the fact (Phase 2): the agency's internal reference, coordinates, fingerprints of several photos, and the description.
 - Target of the price model: the asking price shown in the listing (the last one before the disappearance).
 

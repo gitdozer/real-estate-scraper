@@ -91,16 +91,54 @@ def test_reconcile_absent_alive_twice_is_delisted():
     assert s.list_last_seen == date(2026, 10, 25) and s.detail_gone_date is None
 
 
-def test_reconcile_absent_error_changes_nothing():
+def test_reconcile_absent_error_counts_the_absence_but_decides_nothing():
+    # Decision 0008: the absence from a COMPLETE collection is the evidence; the detail check
+    # only turns it into `removed` at once (404). A failed check leaves the list evidence as is.
     prev = state("1")
     new, events = run([prev], checks={K: "error"})
-    assert events == [] and new[K] == prev
+    s = new[K]
+    assert events == [] and s.status == "active" and s.missing_streak == 1
+    assert s.absent_since == D1 and s.last_check_date == prev.last_check_date and s.delisted_date is None
 
 
-def test_reconcile_absent_unchecked_changes_nothing():
-    prev = state("1")
-    new, events = run([prev])
-    assert events == [] and new[K] == prev
+def test_reconcile_absent_unchecked_counts_the_absence_without_a_check_date():
+    new, events = run([state("1")])
+    s = new[K]
+    assert events == [] and s.status == "active" and s.missing_streak == 1
+    assert s.absent_since == D1 and s.last_check_date is None
+
+
+def test_reconcile_absent_twice_without_checks_is_delisted_from_the_first_day():
+    day1, _ = run([state("1")], day=D1)
+    day2, events = run(day1, day=D2)
+    s = day2[K]
+    assert types(events) == [("1", "delisted")]
+    assert s.status == "delisted" and s.delisted_date == D1 and s.missing_streak == 2
+    assert s.list_last_seen == date(2026, 10, 25) and s.detail_gone_date is None and s.last_check_date is None
+
+
+def test_incomplete_collection_between_two_absences_leaves_the_streak_untouched():
+    # Rule 6: a partial run neither counts as an absence nor resets the count.
+    d1, _ = run([state("1")], day=D1)
+    d2, ev2 = run(d1, ok={SEG: False}, day=D2)
+    assert ev2 == [] and d2[K].missing_streak == 1
+    d3, ev3 = run(d2, scraped=(), day=date(2026, 10, 28))  # segment not collected at all
+    assert ev3 == [] and d3[K].missing_streak == 1
+    d4, ev4 = run(d3, day=date(2026, 10, 29))
+    assert types(ev4) == [("1", "delisted")] and d4[K].delisted_date == D1
+
+
+def test_reappearance_after_one_unchecked_absence_resets_the_count():
+    d1, _ = run([state("1")], day=D1)
+    d2, events = run(d1, cards=[card("1")], day=D2)
+    assert events == [] and d2[K].status == "active" and d2[K].missing_streak == 0 and d2[K].absent_since is None
+
+
+def test_delisted_without_a_check_stays_as_it_is():
+    d1, _ = run([state("1")], day=D1)
+    d2, _ = run(d1, day=D2)
+    d3, events = run(d2, day=date(2026, 10, 28))
+    assert events == [] and d3[K] == d2[K]  # no check made: no check date, no further event
 
 
 def test_reconcile_segment_not_ok_changes_nothing():
@@ -225,11 +263,14 @@ def test_missing_segment_ok_entry_is_treated_as_not_ok():
     assert events == [] and new[K] == prev
 
 
-def test_alive_error_alive_still_delists_from_first_alive_day():
+def test_alive_then_error_delists_on_the_second_complete_absence():
+    # Decision 0008: the second absence from a complete collection counts even if that day's
+    # detail check failed; the disappearance is dated from the first absence.
     d1, _ = run([state("1")], checks={K: "alive"}, day=D1)
-    d2, _ = run(d1, checks={K: "error"}, day=D2)
+    d2, events = run(d1, checks={K: "error"}, day=D2)
+    assert [e.type for e in events] == ["delisted"] and d2[K].delisted_date == D1
     d3, events = run(d2, checks={K: "alive"}, day=date(2026, 10, 28))
-    assert [e.type for e in events] == ["delisted"] and d3[K].delisted_date == D1
+    assert events == [] and d3[K].status == "delisted" and d3[K].last_check_date == date(2026, 10, 28)
 
 
 def test_not_ok_segment_protects_even_with_alive_checks():

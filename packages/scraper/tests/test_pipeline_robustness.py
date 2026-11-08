@@ -348,6 +348,29 @@ async def test_detail_404_stops_the_detail_phase_but_not_the_photos_and_removes_
     assert not any(u.startswith(DETAIL_PREFIX) and u.rsplit("-", 1)[-1] == "5" for u in site.requests)
 
 
+async def test_listing_absent_from_two_complete_collections_is_delisted_without_a_detail_check(site, storage):
+    # Decision 0008: since the 404 check can no longer be made at scale (decision 0007), the
+    # absence from two consecutive complete collections records the disappearance.
+    site.listings[("milano", "vendita")] = [str(i) for i in range(1, 101)]
+    no_checks = Settings(max_retries=1, absence_checks_per_run=0)
+    await run(site, storage, D1, settings=no_checks)
+    site.listings[("milano", "vendita")].remove("5")
+    await run(site, storage, D2, settings=no_checks)
+    s = st(storage)[("trovacasa", "5")]
+    assert s.status == "active" and s.missing_streak == 1 and s.absent_since == D2
+    assert [t for _, t in events(storage, D2) if t in ("removed", "delisted")] == []
+    site.failing_pages.add(("milano", "vendita", 2))  # an incomplete collection in between changes nothing
+    report = await run(site, storage, D3, settings=no_checks)
+    assert report["segments"][0]["reason"] == "failed_pages"
+    assert st(storage)[("trovacasa", "5")].missing_streak == 1 and events(storage, D3) == []
+    site.failing_pages.clear()
+    d4 = D3 + timedelta(days=1)
+    await run(site, storage, d4, settings=no_checks)
+    s = st(storage)[("trovacasa", "5")]
+    assert [t for i, t in events(storage, d4) if i == "5"] == ["delisted"]
+    assert s.status == "delisted" and s.delisted_date == D2 and s.list_last_seen == D1 and s.detail_gone_date is None
+
+
 async def test_absence_checks_run_after_the_photos_and_only_a_sample(site, storage):
     site.listings[("milano", "vendita")] = [str(i) for i in range(1, 101)]  # 3 of 100 absent is not a suspicious drop
     await run(site, storage, D1)
@@ -363,4 +386,4 @@ async def test_absence_checks_run_after_the_photos_and_only_a_sample(site, stora
     removed = [i for i, t in events(storage, D2) if t == "removed"]
     assert len(removed) == 1 and report["details"]["planned"]["absence_check"] == 3
     others = [st(storage)[("trovacasa", i)] for i in ("5", "6", "7") if i not in removed]
-    assert all(s.status == "active" and s.missing_streak == 0 for s in others)
+    assert all(s.status == "active" and s.missing_streak == 1 for s in others)  # counted, not decided (decision 0008)

@@ -77,7 +77,7 @@ Code: `planner.py`. Each listing gets at most one detail download, tagged with i
 | 2 | `new` | a listing never seen before, or one that has reappeared |
 | 3 | `changed` | the listing card's fingerprint has changed (price, floor area, photos, …) |
 | 4 | `never_detailed` | the detail page has never been downloaded (e.g. a previous run was interrupted) |
-| 5 | `delisted_recheck` | a `delisted` listing, re-checked every 7 days until it returns 404 (same treatment as `absence_check` since 0.1.8) |
+| 5 | `delisted_recheck` | a `delisted` listing, re-checked every 7 days until it returns 404 (same treatment as `absence_check` since 0.1.8; it comes after the absence checks for the daily sample, so the 404 confirmation may take long — `delisted` is already the disappearance, decision 0008) |
 | 6 | `rotation` | periodic refresh: each listing has its own **fixed day** in the 7-day cycle (ID modulo 7), or its detail is at least 14 days old |
 | 7 | `full` | only with `full_details: true` (all listings, every day) |
 

@@ -3,9 +3,10 @@
 Funzione pura (nessun I/O). Regole in docs/disappearance-logic.md; in sintesi:
 - un annuncio presente negli elenchi è attivo (nuovo, invariato, ribassato o ricomparso);
 - un annuncio assente cambia stato SOLO se il suo segmento è stato raccolto per
-  intero oggi E il controllo della sua pagina di dettaglio ha dato un esito certo:
-  404 → removed; 200 per due run completi consecutivi → delisted;
-- errori, controlli non eseguiti o segmenti incompleti non cambiano nulla.
+  intero oggi: ogni assenza da una raccolta completa conta (decision 0008); alla
+  seconda consecutiva → delisted; se il controllo del dettaglio risponde 404 → removed
+  subito (il controllo è un campione, decision 0007);
+- segmenti incompleti o non raccolti non cambiano nulla, né in un senso né nell'altro.
 """
 
 from datetime import date
@@ -78,13 +79,16 @@ def _present(prev: ListingState | None, card: Card, bootstrap: bool, run_date: d
 
 
 def _absent(prev: ListingState, check: CheckOutcome | None, run_date: date, events: list[Event]) -> ListingState:
-    if check not in ("alive", "gone"):
-        return prev  # nessun esito certo: non si decide nulla
+    """Called only for a listing absent from a segment collected COMPLETELY today. The absence
+    itself is the evidence (decision 0008): it is counted, and the second consecutive one makes
+    the listing `delisted`. The detail-page check, made for a sample only (decision 0007), can
+    settle it at once: 404 → `removed`. An error or no check leaves the count to the list."""
     ev = dict(source=prev.source, listing_id=prev.listing_id, city=prev.city, contract=prev.contract, run_date=run_date)
+    checked = check in ("alive", "gone")  # a conclusive answer from the detail page
 
     if prev.status == "active":
         absent_since = prev.absent_since or run_date
-        base = dict(absent_since=absent_since, last_check_date=run_date)
+        base = dict(absent_since=absent_since, last_check_date=run_date if checked else prev.last_check_date)
         spell = dict(spell_start=prev.spell_start, list_last_seen=prev.list_last_seen, delisted_date=absent_since)
         if check == "gone":
             events.append(Event(**ev, type="removed", **spell))
@@ -101,7 +105,7 @@ def _absent(prev: ListingState, check: CheckOutcome | None, run_date: date, even
                 Event(**ev, type="detail_gone", spell_start=prev.spell_start, list_last_seen=prev.list_last_seen, delisted_date=prev.delisted_date)
             )
             return prev.model_copy(update=dict(status="removed", detail_gone_date=run_date, last_check_date=run_date))
-        return prev.model_copy(update=dict(last_check_date=run_date))
+        return prev.model_copy(update=dict(last_check_date=run_date)) if checked else prev
 
     return prev  # removed: resta tale finché non ricompare negli elenchi
 

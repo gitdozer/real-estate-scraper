@@ -4,6 +4,10 @@ Changes per component. Versions follow [SemVer](https://semver.org/), with tags 
 
 ## scraper
 
+### 0.1.9 — 2026-11-08
+- **Disappearances from the list evidence** (decision 0008, issue #2): an active listing absent from a segment collected completely has its absence counted even without a detail-page check; on the second consecutive counted absence it becomes `delisted` (`delisted_date` = first day of absence). A sampled check answering 404 still makes it `removed` at once; an error or no check leaves the count to the list. Incomplete or missing collections change nothing, as before.
+- Revises decision 0005, which required a conclusive detail-page check: since decision 0007 that check can be made for one listing per run only.
+
 ### 0.1.8 — 2026-11-08
 - **Root cause of the stalled runs since 2026-11-02 found and removed** (decision 0007, issue #1): one request for a missing listing (404) from a GitHub runner puts the IP in penalty about 10 s later, for hours. The detail queue started with the absence checks, i.e. with 404s by construction.
 - The checks of absent listings (`absence_check`, `delisted_recheck`) leave the detail queue: only `absence_checks_per_run` of them (new setting, default 1) are requested, after the photos, on their own client. Disappearances are limited to that sample until the list-evidence rule lands (follow-up).

@@ -1,32 +1,32 @@
 # How listings appear, change and disappear
 
-Code: `packages/scraper/src/scraper/state.py` (the pure function `reconcile`). Underlying decision: [decisions/0005](decisions/0005-gone-means-sold.md) — **a listing that has gone is treated as sold**.
+Code: `packages/scraper/src/scraper/state.py` (the pure function `reconcile`). Underlying decisions: [decisions/0005](decisions/0005-gone-means-sold.md) — **a listing that has gone is treated as sold** — and [decisions/0008](decisions/0008-disappearance-from-list-evidence.md) — the evidence is the absence from **two consecutive complete collections**; the detail page's 404 is a confirmation made for a sample only ([decisions/0007](decisions/0007-missing-listing-404-penalty.md)).
 
 The project's number-one risk is **false disappearances**: a network error, a missing page or a partial collection being recorded as "listing gone". That is why a listing only changes state when there is conclusive evidence.
 
 ## States
 
 ```
-            (appears)                 absent + detail page 404/410
+            (appears)                 absent + sampled detail check 404/410
    ┌──────► active ──────────────────────────────────────────► removed
    │          │                                                  ▲
-   │          │ absent + detail page 200 on 2 checks             │ detail page 404/410
-   │          ▼                                                  │ (weekly recheck)
+   │          │ absent from 2 consecutive complete collections   │ sampled detail check 404/410
+   │          ▼                                                  │
    │       delisted ─────────────────────────────────────────────┘
    │          │
    └──────────┘  reappears in the search results (from delisted or removed) → "reappeared" event
 ```
 
 - **active** — the listing appears in the search results (or has been absent for too short a time to decide).
-- **delisted** — the listing is absent from the search results (in complete collections) while its detail page still returns 200 on **2 checks**, and it has not reappeared in the meantime. **It counts as gone** for time-to-sell purposes.
-- **removed** — the detail page returns 404 (or 410).
+- **delisted** — the listing has been absent from the search results on **2 consecutive complete collections** of its segment, without reappearing in between (since 0.1.9 no detail-page check is needed, decision 0008). **It counts as gone** for time-to-sell purposes: this is the usual terminal state.
+- **removed** — the detail page returned 404 (or 410) on one of the sampled checks (at most `absence_checks_per_run` per run, decision 0007): a confirmation, not the signal.
 
 ## The three dates
 
 | Field | Meaning |
 |---|---|
 | `list_last_seen` | last day the listing appeared in the search results. **This is the end date used for time to sell.** |
-| `delisted_date` | first day of the absence **confirmed by a conclusive check result** (the start of the absence that was later confirmed) |
+| `delisted_date` | first day of the absence that was later confirmed (by the second complete collection without the listing, or by a 404) |
 | `detail_gone_date` | first day the detail page returned 404/410 |
 
 There can be more than one day between `list_last_seen` and `delisted_date` (a skipped run, an incomplete segment, a check that failed): the disappearance happened somewhere in that interval.
@@ -53,12 +53,9 @@ For every listing **present** in today's search results:
 
 For every **absent** listing:
 1. If its segment (source, city, contract) **was not collected** today, or was collected **incompletely** → no change.
-2. Otherwise, the result of the detail-page check decides:
-   - **404/410** → `removed` (`removed` event; if the listing was `delisted` → `detail_gone` event);
-   - **200** → absence count +1; on the second check returning 200 with no reappearance in between → `delisted` (`delisted` event). Days with an inconclusive result in between do not reset the count;
-   - **error, timeout or check not performed** → no change.
-
-   **Since scraper 0.1.8 the check is made for at most `absence_checks_per_run` listings per run (default 1), after everything else**: a missing listing answers 404 and one 404 puts the runner IP in penalty for hours (decision 0007). The other absent listings stay `active`, with their counters untouched, and are re-planned every day. A follow-up will record the disappearance from the list evidence instead (two consecutive complete collections without the listing); until then `removed` events are limited to that sample.
+2. Otherwise the absence from a complete collection is counted (`missing_streak` +1, `absent_since` = first day of absence), and:
+   - if a sampled detail-page check answered **404/410** → `removed` at once (`removed` event; if the listing was `delisted` → `detail_gone` event);
+   - otherwise (200, error, or no check made — the check is made for at most `absence_checks_per_run` listings per run, default 1, after everything else, decision 0007), on the **second consecutive counted absence** → `delisted` (`delisted` event, `delisted_date` = first day of absence). Incomplete or missing collections in between neither count nor reset.
 
 The cards' `data-eliminato` flag is only stored: its meaning still has to be verified by comparing it with real 404s.
 
