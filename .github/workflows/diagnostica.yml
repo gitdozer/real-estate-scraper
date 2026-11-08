@@ -27,6 +27,10 @@ on:
         description: "Detail kind: requests for non-existent listings (404) before the valid detail pages"
         type: string
         default: "0"
+      dead_every:
+        description: "Detail kind: one request for a non-existent listing (404) after every N valid detail pages"
+        type: string
+        default: "0"
 
 permissions:
   contents: read
@@ -47,4 +51,5 @@ jobs:
           IN_CONCURRENCY: ${{ inputs.concurrency }}
           IN_FIRST_PAGE: ${{ inputs.first_page }}
           IN_DEAD_FIRST: ${{ inputs.dead_first }}
-        run: uv run --no-dev python -m scraper probe --phases "$IN_PHASES" --kind "$IN_KIND" --concurrency "$IN_CONCURRENCY" --first-page "$IN_FIRST_PAGE" --dead-first "$IN_DEAD_FIRST"
+          IN_DEAD_EVERY: ${{ inputs.dead_every }}
+        run: uv run --no-dev python -m scraper probe --phases "$IN_PHASES" --kind "$IN_KIND" --concurrency "$IN_CONCURRENCY" --first-page "$IN_FIRST_PAGE" --dead-first "$IN_DEAD_FIRST" --dead-every "$IN_DEAD_EVERY"

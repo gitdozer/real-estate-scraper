@@ -108,6 +108,27 @@ def test_probe_detail_kind_can_start_with_requests_for_missing_listings(monkeypa
     assert seen["urls"][:3] == probe.missing_detail_urls(seen["urls"][3:], 3)
 
 
+def test_probe_detail_kind_can_spread_requests_for_missing_listings(monkeypatch):
+    import scraper.probe as probe
+
+    seen = {}
+    valid = [f"https://www.trovacasa.it/annunci/mi-tc-1-{i}" for i in range(1, 5)]
+
+    async def fake_harvest(list_urls, city, contract, rate, settings, **kw):
+        return list(valid), {}
+
+    async def fake_probe(urls, phases, settings, concurrency=1, **kw):
+        seen["urls"] = urls
+        return [{"rate": 1.5, "minutes": 1, "requests": 0, "ok": 0, "timeouts": 0, "latency_avg_s": 0}]
+
+    monkeypatch.setattr(probe, "harvest_detail_urls", fake_harvest)
+    monkeypatch.setattr(probe, "run_probe", fake_probe)
+    monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
+    assert main(["probe", "--kind", "detail", "--harvest-pages", "1", "--dead-every", "2", "--phases", "1.5:1"]) == 0
+    assert seen["urls"] == probe.interleave_missing_detail_urls(valid, every=2)
+    assert len(seen["urls"]) == 6
+
+
 def test_probe_list_kind_can_start_from_a_given_page(monkeypatch):
     # Used to reach the end of the search results quickly (hypothesis: a request beyond the
     # last page, answered with 404, makes the site penalise the IP).

@@ -81,7 +81,7 @@ def _cmd_import_legacy(args) -> int:
 
 
 def _cmd_probe(args) -> int:
-    from scraper.probe import harvest_detail_urls, missing_detail_urls, run_probe
+    from scraper.probe import harvest_detail_urls, interleave_missing_detail_urls, missing_detail_urls, run_probe
     from scraper.sources.trovacasa import list_url
 
     settings = load_settings(Path(args.config_dir) / "settings.yaml", {})
@@ -94,6 +94,8 @@ def _cmd_probe(args) -> int:
             # The daily run's detail phase starts with absence checks, answered 404: put the
             # same burst of requests for missing listings before the valid detail pages.
             urls = missing_detail_urls(urls, args.dead_first) + urls
+        if args.dead_every > 0:
+            urls = interleave_missing_detail_urls(urls, args.dead_every)
     else:
         # Distinct pages only (the probe never repeats a URL): ~2,000 pages, enough for 0.5 req/s for an hour.
         # --first-page reaches the end of the results quickly: pages past the last one answer 404.
@@ -140,6 +142,7 @@ def build_parser() -> argparse.ArgumentParser:
     probe.add_argument("--first-page", type=int, default=1, help="list kind: first search-result page to request")
     probe.add_argument("--harvest-pages", type=int, default=300, help="detail kind: search-result pages read to collect URLs (24 each)")
     probe.add_argument("--dead-first", type=int, default=0, help="detail kind: requests for non-existent listings (404) made before the valid detail pages")
+    probe.add_argument("--dead-every", type=int, default=0, help="detail kind: one request for a non-existent listing (404) after every N valid detail pages")
     probe.add_argument("--config-dir", default="config")
     probe.set_defaults(func=_cmd_probe)
 

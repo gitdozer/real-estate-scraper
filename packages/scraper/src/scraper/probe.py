@@ -139,6 +139,21 @@ def missing_detail_urls(harvested: list[str], n: int) -> list[str]:
     return urls
 
 
+def interleave_missing_detail_urls(valid: list[str], every: int) -> list[str]:
+    """One request for a missing listing after every `every` valid detail pages (0 = none):
+    measures the 404 density the site tolerates, once a burst of ~10 proved to trigger the
+    penalty (probe of 2026-11-08). The missing ids are distinct across the whole list."""
+    if every <= 0 or not valid:
+        return list(valid)
+    missing = missing_detail_urls(valid, len(valid) // every)
+    out: list[str] = []
+    for k, url in enumerate(valid, start=1):
+        out.append(url)
+        if k % every == 0 and missing:
+            out.append(missing.pop(0))
+    return out
+
+
 async def harvest_detail_urls(
     list_urls: list[str],
     city: str,

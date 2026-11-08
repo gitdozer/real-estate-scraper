@@ -183,3 +183,14 @@ def test_missing_detail_urls_handles_more_requests_than_harvested_urls():
     assert len(dead) == len(set(dead)) == 3
     assert all(u.startswith("https://www.trovacasa.it/annunci/mi-tc-7-9000000") for u in dead)
     assert missing_detail_urls([], 3) == []
+
+
+def test_interleave_missing_detail_urls_puts_one_missing_listing_every_n_valid_pages():
+    # Second step of 2026-11-08: a burst of ~10 × 404 triggers the penalty; this measures
+    # the 404 density the site tolerates when the requests are spread among valid pages.
+    from scraper.probe import interleave_missing_detail_urls
+
+    valid = [f"https://www.trovacasa.it/annunci/mi-tc-1-{i}" for i in range(1, 8)]
+    mixed = interleave_missing_detail_urls(valid, every=3)
+    assert [u.rsplit("-", 1)[1] for u in mixed] == ["1", "2", "3", "900000001", "4", "5", "6", "900000002", "7"]
+    assert interleave_missing_detail_urls(valid, every=0) == valid
