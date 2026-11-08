@@ -92,6 +92,19 @@ def plan_details(
     return sorted(tasks, key=lambda t: (_PRIORITY.index(t.reason), last.get(t.key, date.min)))
 
 
+_CHECK_REASONS = ("absence_check", "delisted_recheck")
+
+
+def split_checks(tasks: list[DetailTask], limit: int) -> tuple[list[DetailTask], list[DetailTask]]:
+    """Separates the detail-page checks of absent listings (`absence_check`, `delisted_recheck`)
+    from the other tasks and keeps at most `limit` of them, in priority order. A missing
+    listing answers 404, and since ~2026-11-02 one 404 puts the runner IP in penalty for hours
+    (decision 0007): the checks run after everything else, and only a sample of them."""
+    checks = [t for t in tasks if t.reason in _CHECK_REASONS]
+    others = [t for t in tasks if t.reason not in _CHECK_REASONS]
+    return others, checks[: max(0, limit)]
+
+
 def plan_photos(
     state: dict[ListingKey, ListingState],
     cards: dict[ListingKey, Card],

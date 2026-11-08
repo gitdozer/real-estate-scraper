@@ -58,6 +58,8 @@ For every **absent** listing:
    - **200** → absence count +1; on the second check returning 200 with no reappearance in between → `delisted` (`delisted` event). Days with an inconclusive result in between do not reset the count;
    - **error, timeout or check not performed** → no change.
 
+   **Since scraper 0.1.8 the check is made for at most `absence_checks_per_run` listings per run (default 1), after everything else**: a missing listing answers 404 and one 404 puts the runner IP in penalty for hours (decision 0007). The other absent listings stay `active`, with their counters untouched, and are re-planned every day. A follow-up will record the disappearance from the list evidence instead (two consecutive complete collections without the listing); until then `removed` events are limited to that sample.
+
 The cards' `data-eliminato` flag is only stored: its meaning still has to be verified by comparing it with real 404s.
 
 ## Complete segment (safety lock)

@@ -26,6 +26,7 @@ small_segment_max_missing: 2 # ...cioè al massimo questi annunci mancanti
 active_drop_alert: 0.05      # allarme se gli annunci attivi calano più di questa quota rispetto al run precedente
 drop_confirm_runs: 3         # un calo sospetto di un segmento si accetta come reale dopo questi run consecutivi
 delisted_recheck_days: 7     # ogni quanti giorni ricontrollare il dettaglio di un annuncio "delisted"
+absence_checks_per_run: 1    # detail-page checks of absent listings per run, made after everything else: a missing listing answers 404 and one 404 puts the runner IP in penalty for hours (decision 0007)
 
 # --- Conservazione ---
 raw_retention_days: 90       # giorni di conservazione dell'HTML grezzo

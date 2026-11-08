@@ -73,7 +73,7 @@ async def test_chunks_are_handled_before_next_fetch(monkeypatch):
     monkeypatch.setattr(pipeline, "CHUNK", 2)
     f = RecordingFetcher()
     opened = await _for_each_chunk(f, list(range(5)), str, False, None, lambda item, r: f.log.append(("handle", item)))
-    assert opened is False
+    assert opened is None  # neither the circuit opened nor a stop status arrived
     assert f.log == [("fetch", 2), ("handle", 0), ("handle", 1), ("fetch", 2), ("handle", 2), ("handle", 3), ("fetch", 1), ("handle", 4)]
 
 

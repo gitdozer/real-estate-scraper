@@ -41,6 +41,7 @@ class Settings(BaseModel):
     active_drop_alert: float = 0.05
     drop_confirm_runs: int = Field(3, gt=0)
     delisted_recheck_days: int = Field(7, gt=0)
+    absence_checks_per_run: int = Field(1, ge=0)
     raw_retention_days: int = 90
     raw_max_per_run: int = 3000
     state_history_days: int = 30

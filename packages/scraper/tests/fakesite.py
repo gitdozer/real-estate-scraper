@@ -105,6 +105,7 @@ class FakeSite:
         self.declared_override: dict[tuple[str, str], int] = {}
         self.extra_on_page: dict[tuple[str, str, int], list[str]] = {}
         self.missing_pages: set[tuple[str, str, int]] = set()  # pagine che rispondono 404
+        self.dead: set[str] = set()  # IDs visible in the lists whose detail page answers 404 anyway
         self.requests: list[str] = []
 
     def _page_ids(self, slug: str, contract: str, page: int) -> list[str]:
@@ -140,7 +141,7 @@ class FakeSite:
         if parts[0] == "annunci":
             listing_id = parts[1].rsplit("-", 1)[-1]
             visible = any(listing_id in ids for ids in self.listings.values())
-            if visible or listing_id in self.alive:
+            if (visible and listing_id not in self.dead) or listing_id in self.alive:
                 return httpx.Response(200, text=detail_html(listing_id, price=self.prices.get(listing_id, "250.000 &#x20AC;")))
             return httpx.Response(404, text="non trovato")
         return httpx.Response(404)

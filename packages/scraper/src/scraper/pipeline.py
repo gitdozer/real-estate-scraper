@@ -31,10 +31,10 @@ import polars as pl
 from scraper import frames
 from scraper.config import City, Settings
 from scraper.fingerprint import card_fingerprint, detail_hash, photo_ids_hash
-from scraper.http import CircuitOpen, Fetcher, FetchResult
-from scraper.models import Card, CheckOutcome, Detail, ListingKey, ListingState, SegmentKey
+from scraper.http import CircuitOpen, Fetcher, FetchResult, FetchStopped
+from scraper.models import Card, CheckOutcome, Detail, Event, ListingKey, ListingState, SegmentKey
 from scraper.photos import hash_image
-from scraper.planner import DetailTask, plan_details, plan_photos
+from scraper.planner import DetailTask, plan_details, plan_photos, split_checks
 from scraper.quality import active_drop_alert, segment_ok
 from scraper.scope import classify
 from scraper.sources.trovacasa import TROVACASA
@@ -144,12 +144,13 @@ async def _for_each_chunk(
     deadline: float | None,
     handle: Callable[[Any, FetchResult | None], None],
     progress: Callable[[int, int], None] | None = None,
-) -> bool:
+) -> str | None:
     """Scarica a blocchi di CHUNK richieste ed elabora ogni blocco SUBITO, prima di scaricare
     il successivo: in memoria resta un solo blocco di pagine o immagini alla volta (al bootstrap
     i dettagli sono ~35.000: tenerli tutti in memoria supererebbe i 16 GB del runner).
     `handle(item, risultato)` riceve None per le richieste non eseguite (scadenza o circuito).
-    Restituisce True se il circuito si è aperto."""
+    Returns "circuit" if the circuit opened, "stopped" if the fetcher stopped after a stop
+    status (e.g. the first 404 of the detail phase, decision 0007), None otherwise."""
     for i in range(0, len(items), CHUNK):
         chunk = items[i : i + CHUNK]
         try:
@@ -160,12 +161,12 @@ async def _for_each_chunk(
                 handle(x, r)
             for x in items[i + CHUNK :]:
                 handle(x, None)
-            return True
+            return "stopped" if isinstance(exc, FetchStopped) else "circuit"
         for x, r in zip(chunk, results):
             handle(x, r)
         if progress is not None:
             progress(min(i + CHUNK, len(items)), len(items))
-    return False
+    return None
 
 
 async def _heartbeat(fetcher: Fetcher, phase: str, minutes: Callable[[], float], every_s: float | None = None) -> None:
@@ -344,10 +345,16 @@ async def _run_daily(
     # Search-result and detail pages get separate clients and paces: the site limits search
     # results far more than detail pages (decision 0006).
     site = Fetcher(settings.list_concurrency, settings, rate_per_s=settings.list_rate_per_s, transport=transport, clock=clock, sleep=sleep)
+    # One 404 (a listing removed between the search results and its detail page) puts the runner
+    # IP in penalty for hours: the detail phase stops there (decision 0007).
     detail_site = Fetcher(
-        settings.detail_concurrency, settings, rate_per_s=settings.detail_rate_per_s, transport=transport, clock=clock, sleep=sleep
-    )
+        settings.detail_concurrency, settings, rate_per_s=settings.detail_rate_per_s, transport=transport, clock=clock, sleep=sleep,
+        stop_on_status=(404, 410),
+    )  # fmt: skip
     images = Fetcher(settings.image_concurrency, settings, rate_per_s=settings.image_rate_per_s, transport=transport, clock=clock, sleep=sleep)
+    # The checks of absent listings run last, on their own client without the stop: a 404 is the
+    # expected answer there, and the site keeps answering 404s instantly even once in penalty.
+    check_site = Fetcher(settings.detail_concurrency, settings, rate_per_s=settings.detail_rate_per_s, transport=transport, clock=clock, sleep=sleep)
     circuit = False
     try:
         # 1. elenchi
@@ -398,7 +405,9 @@ async def _run_daily(
                 censor.add(s)
 
         # 3. dettagli
-        tasks: list[DetailTask] = [] if circuit else plan_details(prev, cards, check_segments, settings, run_date)
+        planned: list[DetailTask] = [] if circuit else plan_details(prev, cards, check_segments, settings, run_date)
+        # The checks of absent listings answer 404: only a sample, after the photos (decision 0007).
+        tasks, check_tasks = split_checks(planned, settings.absence_checks_per_run)
         detail_deadline = t0 + DETAIL_SHARE * settings.max_runtime_minutes * 60
         details: dict[ListingKey, Detail] = {}
         checks: dict[ListingKey, CheckOutcome] = {}
@@ -461,25 +470,31 @@ async def _run_daily(
         log.info("[dettagli] pianificati %d (%.1f min)", len(tasks), minutes())
         beat = asyncio.create_task(_heartbeat(detail_site, "dettagli", minutes))
         try:
-            details_circuit = await _for_each_chunk(
+            details_outcome = await _for_each_chunk(
                 detail_site, tasks, lambda t: t.url, False, detail_deadline, handle_detail, progress_of("dettagli")
             )
         finally:
             beat.cancel()
-        if details_circuit:
+        if details_outcome == "circuit":
             circuit = True
             alerts.append("circuit_open_details")
+        elif details_outcome == "stopped":
+            alerts.append("details_stopped_404")  # the rest of the queue carries over to the next day
         attempted = len(tasks) - dstats["skipped_deadline"]
         if dstats["errors"] > max(20, 0.1 * attempted):
             alerts.append("details_errors")  # molte pagine non scaricate o non riconosciute: sito cambiato o blocco
 
         # 4. stato ed eventi
-        new_state, events = reconcile(prev, cards, details, checks, scraped, ok, censor, run_date)
-        # Un annuncio "cambiato" il cui dettaglio non è arrivato tiene l'impronta vecchia,
-        # così domani risulta ancora cambiato e il dettaglio viene richiesto di nuovo.
-        for t in tasks:
-            if t.reason == "changed" and t.key not in details and t.key in new_state:
-                new_state[t.key] = new_state[t.key].model_copy(update=dict(last_fingerprint=prev[t.key].last_fingerprint))
+        def settle() -> tuple[dict[ListingKey, ListingState], list[Event]]:
+            new_state, events = reconcile(prev, cards, details, checks, scraped, ok, censor, run_date)
+            # Un annuncio "cambiato" il cui dettaglio non è arrivato tiene l'impronta vecchia,
+            # così domani risulta ancora cambiato e il dettaglio viene richiesto di nuovo.
+            for t in tasks:
+                if t.reason == "changed" and t.key not in details and t.key in new_state:
+                    new_state[t.key] = new_state[t.key].model_copy(update=dict(last_fingerprint=prev[t.key].last_fingerprint))
+            return new_state, events
+
+        new_state, events = settle()
 
         # 5. foto
         new_keys = {(e.source, e.listing_id) for e in events if e.type == "new"}
@@ -511,13 +526,23 @@ async def _run_daily(
             )
         finally:
             beat.cancel()
-        if photos_circuit:
+        if photos_circuit == "circuit":
             alerts.append("circuit_open_photos")
+
+        # 5b. checks of absent listings, after everything else: a missing listing answers 404 and
+        # one 404 puts the runner IP in penalty for hours (decision 0007). Their outcome can only
+        # add removals, so the state is settled again.
+        if check_tasks:
+            log.info("[controlli] pianificati %d (%.1f min)", len(check_tasks), minutes())
+            await _for_each_chunk(check_site, check_tasks, lambda t: t.url, False, photo_deadline, handle_detail)
+            if checks:
+                new_state, events = settle()
         for key, n in hashed.items():
             new_state[key] = new_state[key].model_copy(update=dict(photos_done=n, photo_ids_hash=photo_ids_hash(cards[key].photo_ids)))
     finally:
         await site.aclose()
         await detail_site.aclose()
+        await check_site.aclose()
         await images.aclose()
 
     # 6. registro dei segmenti, allarmi
@@ -553,7 +578,7 @@ async def _run_daily(
         rerun=rerun,
         dry_run=options.dry_run,
         segments=seg_report,
-        details=dict(planned=dict(Counter(t.reason for t in tasks)), **dstats, checks=dict(Counter(checks.values()))),
+        details=dict(planned=dict(Counter(t.reason for t in planned)), **dstats, checks=dict(Counter(checks.values()))),
         photos=dict(planned=len(ptasks), **pstats),
         events=dict(Counter(e.type for e in events)),
         active=dict(prev=prev_n, now=now_n),

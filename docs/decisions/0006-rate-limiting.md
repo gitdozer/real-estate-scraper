@@ -89,3 +89,5 @@ The first two runs with 0.1.4 (2026-10-31 and 2026-11-01) read **all 1,579 searc
 **2026-11-04:** the runs of 2026-11-02 and 11-03 read all search results without errors but then stayed stuck in the details phase until GitHub cancelled them: not a rate problem, but a request that never completed and blocked its batch. Since 0.1.6 every request has a total limit (2 × `timeout_s`).
 
 **2026-11-07:** the 0.1.6 runs (11-04 → 11-07) showed with the new heartbeat that the process was not stuck: from the first minute of the details phase almost every detail page timed out, while the same pages answer normally from a home connection. The phase still did not stop at its deadline because the deadline was checked only before a request's first attempt; fixed in 0.1.7. Why the site stopped answering detail pages to GitHub's IPs after 2026-11-01 is being investigated; if it is a deliberate block, rule 5 applies: we do not work around it.
+
+**2026-11-08:** found. The detail queue started with the absence checks, whose pages answer 404, and since ~11-02 one 404 from a runner IP puts it in penalty for hours. See [decision 0007](0007-missing-listing-404-penalty.md).

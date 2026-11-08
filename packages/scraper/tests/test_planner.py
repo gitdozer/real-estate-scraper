@@ -200,3 +200,19 @@ def test_plan_photos_priority_new_then_changed_then_backlog_under_cap():
 def test_bucket_with_unicode_digits_does_not_crash():
     tasks = plan([fresh("²", last_detail_date=DAY - timedelta(days=1))], [card("²")])
     assert set(reasons(tasks).values()) <= {"rotation"}
+
+
+def test_split_checks_separates_and_caps_the_404_prone_tasks():
+    # A request for a missing listing (404) puts the runner IP in penalty (decision 0007):
+    # absence checks and delisted rechecks leave the detail queue and only a sample is kept,
+    # to be requested after everything else.
+    from scraper.planner import split_checks
+
+    due = fresh("3", status="delisted", last_check_date=DAY - timedelta(days=30))
+    tasks = plan([fresh("1"), fresh("2"), due, fresh("4", last_detail_date=None)], [card("4"), card("5")])
+    assert reasons(tasks) == {"1": "absence_check", "2": "absence_check", "3": "delisted_recheck", "4": "never_detailed", "5": "new"}
+    main, checks = split_checks(tasks, limit=2)
+    assert reasons(main) == {"4": "never_detailed", "5": "new"}
+    assert [t.key[1] for t in checks] == ["1", "2"]  # priority order kept, capped
+    assert split_checks(tasks, limit=0) == (main, [])
+    assert len(split_checks(tasks, limit=10)[1]) == 3

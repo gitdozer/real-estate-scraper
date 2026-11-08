@@ -71,6 +71,12 @@ class CircuitOpen(Exception):
         self.partial = partial
 
 
+class FetchStopped(CircuitOpen):
+    """A response with one of the `stop_on_status` codes arrived: the following requests are
+    not made. Since ~2026-11-02 one request for a missing listing (404) from a GitHub runner
+    puts the IP in penalty about 10 s later, for hours (decision 0007): going on is useless."""
+
+
 class Fetcher:
     def __init__(
         self,
@@ -80,8 +86,11 @@ class Fetcher:
         transport: httpx.AsyncBaseTransport | None = None,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         clock: Callable[[], float] = time.monotonic,
+        stop_on_status: tuple[int, ...] = (),
     ):
         self._settings = settings
+        self._stop_on_status = stop_on_status
+        self._stopped: str | None = None  # "http_<status>" once a stop status has been received
         self._limit = max(1, concurrency)
         self._rate = rate_per_s  # 0 = nessun limite di ritmo
         self._max_limit = self._limit  # the brake release never goes beyond the configured pace
@@ -118,6 +127,7 @@ class Fetcher:
             "in_flight": self._active,
             "latency_avg_s": round(self._latency_total / self._latency_n, 2) if self._latency_n else 0.0,
             "latency_max_s": round(self._latency_max, 2),
+            "stopped": self._stopped,
         }
 
     def _note_latency(self, started: float) -> None:
@@ -190,6 +200,8 @@ class Fetcher:
         for attempt in range(1, self._settings.max_retries + 1):
             if self._circuit_open:
                 raise CircuitOpen(url)
+            if self._stopped is not None:
+                raise FetchStopped(url)
             retry_after: float | None = None
             async with self._slot():
                 await self._pace()
@@ -229,6 +241,8 @@ class Fetcher:
                         blocked = status in _BLOCKED
                         if blocked:
                             self._counts["failures"] += 1
+                        if status in self._stop_on_status:
+                            self._stopped = f"http_{status}"
                         self._record(failed=blocked)
                         return FetchResult(
                             url=url,
@@ -259,7 +273,7 @@ class Fetcher:
                 t.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
             partial = [t.result() if t.done() and not t.cancelled() and t.exception() is None else None for t in tasks]
-            raise CircuitOpen(*exc.args, partial=partial) from exc
+            raise type(exc)(*exc.args, partial=partial) from exc
 
 
 def _parse_retry_after(value: str | None) -> float | None:

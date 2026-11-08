@@ -4,6 +4,12 @@ Changes per component. Versions follow [SemVer](https://semver.org/), with tags 
 
 ## scraper
 
+### 0.1.8 — 2026-11-08
+- **Root cause of the stalled runs since 2026-11-02 found and removed** (decision 0007, issue #1): one request for a missing listing (404) from a GitHub runner puts the IP in penalty about 10 s later, for hours. The detail queue started with the absence checks, i.e. with 404s by construction.
+- The checks of absent listings (`absence_check`, `delisted_recheck`) leave the detail queue: only `absence_checks_per_run` of them (new setting, default 1) are requested, after the photos, on their own client. Disappearances are limited to that sample until the list-evidence rule lands (follow-up).
+- The detail phase stops at the first 404 or 410 (alert `details_stopped_404`); the rest of the queue carries over to the next day, photos and write happen normally.
+- `probe --kind detail --dead-first N` and `--dead-every N` (workflow inputs `dead_first`, `dead_every`) reproduce the trigger with non-existent listing ids.
+
 ### 0.1.7 — 2026-11-07
 - The phase deadline is checked right before every attempt, not only before the first one: when every detail page timed out, retries queued behind other requests kept starting after the deadline (one 30 s timeout each), the phase never ended and GitHub cancelled the job before anything was written (2026-11-04 → 11-07).
 

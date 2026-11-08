@@ -106,6 +106,7 @@ Open the run on GitHub Actions: the summary shows which check failed.
 | `segments_not_ok` with `no_declared_total` | page 1 does not show the total | the site has probably changed its structure: update the parser (`sources/trovacasa.py`) and the fixtures |
 | `active_drop` | active listings dropped by more than 5% | check on the site whether the drop is real |
 | `circuit_open` | too many errors even at concurrency 1 (including 401/403/451): the site is struggling or is blocking us | look at the "Codici HTTP elenchi/dettagli" (HTTP status codes) lines in the summary; if it keeps happening for days (persistent 403s), switch to **plan B** (below) |
+| `details_stopped_404` | a detail page answered 404/410 (a listing removed between the search results and its detail page): the detail phase stopped there, because one 404 puts the runner IP in penalty for hours (decision 0007) | nothing: the remaining detail pages carry over to the next day ("oltre la scadenza" in the summary); photos and write happened normally. If it happens every day, look at the `gone` count: more than a handful means the search results list pages that no longer exist |
 | `details_errors` | many detail pages not downloaded or not recognized (more than 20 and more than 10%) | probably a change in the site's structure or an anti-bot check page: open a listing by hand, then update the parser and the fixtures |
 
 The full report, with samples of the errors, is on R2 at `runs/dt=YYYY-MM-DD/report.json`.

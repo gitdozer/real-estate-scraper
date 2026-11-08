@@ -158,3 +158,31 @@ async def test_a_response_that_never_ends_becomes_an_error():
     assert not r.ok and r.error == "total_timeout"
     assert len(calls) == 2  # retried like any other timeout
     assert f.stats["by_status"]["total_timeout"] == 2
+
+
+async def test_stop_on_status_stops_the_following_requests_and_keeps_the_results():
+    # Since ~2026-11-02 one request for a missing listing (404) from a GitHub runner puts the IP
+    # in penalty ~10 s later for hours (decision 0007): after a 404 the detail phase must stop.
+    from scraper.http import FetchStopped
+
+    def handler(request):
+        return httpx.Response(404) if request.url.path.endswith("-2") else httpx.Response(200, text="ok")
+
+    sleep = FakeSleep()
+    f = Fetcher(1, Settings(), transport=httpx.MockTransport(handler), sleep=sleep, stop_on_status=(404, 410))
+    urls = [f"https://www.trovacasa.it/annunci/x-{i}" for i in range(1, 6)]
+    with pytest.raises(FetchStopped) as info:
+        await f.get_many(urls)
+    assert isinstance(info.value, CircuitOpen)  # handled like an open circuit: results so far are kept
+    partial = info.value.partial
+    assert partial[0].ok and partial[1].status == 404 and partial[2:] == [None, None, None]
+    assert f.stats["stopped"] == "http_404" and f.stats["requests"] == 2
+
+
+async def test_without_stop_on_status_a_404_does_not_stop_the_others():
+    def handler(request):
+        return httpx.Response(404) if request.url.path.endswith("-2") else httpx.Response(200, text="ok")
+
+    f, _ = make(handler, concurrency=1)
+    results = await f.get_many([f"https://www.trovacasa.it/annunci/x-{i}" for i in range(1, 4)])
+    assert [r.status for r in results] == [200, 404, 200] and f.stats["stopped"] is None

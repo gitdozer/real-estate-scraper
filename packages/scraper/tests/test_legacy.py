@@ -54,7 +54,9 @@ async def test_first_live_run_after_legacy(tmp_path):
     site.listings[("milano", "vendita")] = ["1", "4", "5", "77"]  # 2 e 3 spariti (404), 77 nuovo
     site.prices.update({"1": "209.000 &#x20AC;", "4": "1.450.000 &#x20AC;", "5": "320.000 &#x20AC;"})
     day = date(2026, 10, 26)
-    await run_daily(s, [MILANO], Settings(max_retries=1), RunOptions(run_date=day), transport=httpx.MockTransport(site.handler))
+    # two absence checks are needed on the same day (the production sample is 1, decision 0007)
+    settings = Settings(max_retries=1, absence_checks_per_run=2)
+    await run_daily(s, [MILANO], settings, RunOptions(run_date=day), transport=httpx.MockTransport(site.handler))
     ev = read_parquet(s, partition_key("events", day))
     by_type = {}
     for lid, t in zip(ev["listing_id"], ev["type"]):

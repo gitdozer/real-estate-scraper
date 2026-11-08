@@ -82,8 +82,9 @@ async def test_real_drop_accepted_after_confirm_runs(site, storage):
     for gone in ("101", "102", "103", "104"):
         site.listings[("monza", "vendita")].remove(gone)
     reasons = []
+    checks_all = Settings(max_retries=1, absence_checks_per_run=10)  # every absence confirmed the same day (production sample: 1)
     for offset in (1, 2, 3):
-        report = await run(site, storage, D1 + timedelta(days=offset), cities=(MONZA,))
+        report = await run(site, storage, D1 + timedelta(days=offset), cities=(MONZA,), settings=checks_all)
         reasons.append(report["segments"][0]["reason"])
     assert reasons == ["suspicious_drop", "suspicious_drop", "drop_confirmed"]
     removed = sorted(i for i, t in events(storage, D1 + timedelta(days=3)) if t == "removed")
@@ -321,3 +322,45 @@ async def test_run_still_writes_when_every_detail_page_times_out(site, storage):
     assert read_parquet(storage, partition_key("observations", D2)) is not None  # the day was written
     assert report["events"].get("removed", 0) == 0
     assert st(storage)[("trovacasa", "9")].status == "active"
+
+
+DETAIL_PREFIX = "https://www.trovacasa.it/annunci/"  # photo URLs contain "/annunci/" too, on another host
+
+
+async def test_detail_404_stops_the_detail_phase_but_not_the_photos_and_removes_nothing(site, storage):
+    # Decision 0007: one 404 from a GitHub runner leaves every following detail request hanging
+    # for hours. The detail phase stops at the first 404, the photos (another host) and the
+    # write still happen, and the listings whose detail was not read stay as they were.
+    await run(site, storage, D1)
+    site.listings[("milano", "vendita")].append("31")  # new listing...
+    site.dead.add("31")  # ...removed again before its detail page is requested
+    site.listings[("milano", "vendita")].remove("5")  # an absent listing: its check must not run before the photos
+    for i in ("1", "2"):
+        site.prices[i] = "100.000 &#x20AC;"  # changed listings queued after the new one
+    settings = Settings(max_retries=1, absence_checks_per_run=0)
+    site.requests.clear()
+    report = await run(site, storage, D2, settings=settings)
+    assert "details_stopped_404" in report["alerts"] and report["exit_code"] == 0
+    assert report["details"]["gone"] == 1 and report["details"]["skipped_deadline"] >= 1
+    assert report["photos"]["planned"] > 0 and report["photos"]["done"] == report["photos"]["planned"]
+    assert [t for _, t in events(storage, D2) if t in ("removed", "delisted")] == []
+    assert st(storage)[("trovacasa", "5")].status == "active"
+    assert not any(u.startswith(DETAIL_PREFIX) and u.rsplit("-", 1)[-1] == "5" for u in site.requests)
+
+
+async def test_absence_checks_run_after_the_photos_and_only_a_sample(site, storage):
+    site.listings[("milano", "vendita")] = [str(i) for i in range(1, 101)]  # 3 of 100 absent is not a suspicious drop
+    await run(site, storage, D1)
+    for gone in ("5", "6", "7"):
+        site.listings[("milano", "vendita")].remove(gone)
+    site.listings[("milano", "vendita")].append("101")  # a new listing, so that photos are requested today
+    site.requests.clear()
+    report = await run(site, storage, D2, settings=Settings(max_retries=1, absence_checks_per_run=1))
+    check_requests = [u for u in site.requests if u.startswith(DETAIL_PREFIX) and u.rsplit("-", 1)[-1] in ("5", "6", "7")]
+    assert len(check_requests) == 1
+    last_photo = max(i for i, u in enumerate(site.requests) if "img.trovacasa.it" in u or "pic.trovacasa.it" in u)
+    assert site.requests.index(check_requests[0]) > last_photo
+    removed = [i for i, t in events(storage, D2) if t == "removed"]
+    assert len(removed) == 1 and report["details"]["planned"]["absence_check"] == 3
+    others = [st(storage)[("trovacasa", i)] for i in ("5", "6", "7") if i not in removed]
+    assert all(s.status == "active" and s.missing_streak == 0 for s in others)
