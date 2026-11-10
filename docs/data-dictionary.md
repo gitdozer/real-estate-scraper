@@ -184,7 +184,7 @@ Path: `raw/dt=YYYY-MM-DD/raw.parquet`. Used to re-parse pages if the parser had 
 | Column | Type | Meaning |
 |---|---|---|
 | `source`, `listing_id`, `city`, `contract` | str | listing and segment |
-| `reason` | str | why the page was downloaded (`new`, `changed`, `never_detailed`, or an absence check that returned 404 or a redirect: the first 50 per run) |
+| `reason` | str | why the page was downloaded (`new`, `changed`, `never_detailed`; or, for pages that returned 404 or a redirect — the first 50 per run — any reason, including the absence checks) |
 | `url`, `final_url` | str | requested URL and final URL after any redirects |
 | `status` | int | HTTP status code |
 | `html_gz` | binary | full page, gzip-compressed (`gzip.decompress(...).decode()`) |

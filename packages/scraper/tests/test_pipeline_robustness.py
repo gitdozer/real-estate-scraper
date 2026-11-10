@@ -3,6 +3,7 @@
 import json
 from datetime import timedelta
 
+import polars as pl
 import pytest
 from test_pipeline import D1, D2, D3, MILANO, MONZA, SET, events, run, site, st, storage  # noqa: F401 (fixture)
 
@@ -346,6 +347,13 @@ async def test_detail_404_stops_the_detail_phase_but_not_the_photos_and_removes_
     assert [t for _, t in events(storage, D2) if t in ("removed", "delisted")] == []
     assert st(storage)[("trovacasa", "5")].status == "active"
     assert not any(u.startswith(DETAIL_PREFIX) and u.rsplit("-", 1)[-1] == "5" for u in site.requests)
+    # The report on R2 (private) says which listing answered 404 and why it was requested, and
+    # the 404 page is kept with the raw pages: the only evidence to learn what these 404s are.
+    assert [(s["reason"], s["status"], s["url"].rsplit("-", 1)[-1]) for s in report["gone_samples"]] == [("new", 404, "31")]
+    from scraper.storage import partition_key, read_parquet
+
+    raw = read_parquet(storage, partition_key("raw", D2, "raw.parquet")).filter(pl.col("status") == 404)
+    assert raw.select("listing_id", "reason", "status").rows() == [("31", "new", 404)]
 
 
 async def test_listing_absent_from_two_complete_collections_is_delisted_without_a_detail_check(site, storage):

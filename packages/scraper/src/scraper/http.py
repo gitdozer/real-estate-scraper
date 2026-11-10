@@ -212,6 +212,13 @@ class Fetcher:
                     if attempt == 1:
                         return None  # never attempted: skipped, it stays in the queue for tomorrow
                     break  # already attempted: it counts as failed
+                # Checked again here, for the same reason: every request of a chunk passes the
+                # check at the top at once, before waiting for a slot, so a stop status seen in
+                # the meantime did not stop them (run of 2026-11-10).
+                if self._circuit_open:
+                    raise CircuitOpen(url)
+                if self._stopped is not None:
+                    raise FetchStopped(url)
                 attempts = attempt
                 self._counts["requests"] += 1
                 started = self._clock()

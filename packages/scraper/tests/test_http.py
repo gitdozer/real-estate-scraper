@@ -179,6 +179,27 @@ async def test_stop_on_status_stops_the_following_requests_and_keeps_the_results
     assert f.stats["stopped"] == "http_404" and f.stats["requests"] == 2
 
 
+async def test_stop_on_status_also_stops_the_requests_already_waiting_for_a_slot():
+    # Run of 2026-11-10: with real I/O every request of a chunk passes the "stopped?" check at
+    # once (before waiting for a slot and for the pace), so after the first 404 the following
+    # requests still went out; the phase ended only because a retry re-entered the loop. The
+    # check must be repeated right before the request is sent.
+    import asyncio
+
+    from scraper.http import FetchStopped
+
+    async def handler(request):
+        await asyncio.sleep(0)  # a real transport yields to the event loop before answering
+        return httpx.Response(404) if request.url.path.endswith("-2") else httpx.Response(200, text="ok")
+
+    f = Fetcher(1, Settings(), transport=httpx.MockTransport(handler), sleep=FakeSleep(), stop_on_status=(404, 410))
+    urls = [f"https://www.trovacasa.it/annunci/x-{i}" for i in range(1, 6)]
+    with pytest.raises(FetchStopped) as info:
+        await f.get_many(urls)
+    assert f.stats["requests"] == 2  # nothing sent after the 404
+    assert info.value.partial[0].ok and info.value.partial[1].status == 404 and info.value.partial[2:] == [None, None, None]
+
+
 async def test_without_stop_on_status_a_404_does_not_stop_the_others():
     def handler(request):
         return httpx.Response(404) if request.url.path.endswith("-2") else httpx.Response(200, text="ok")

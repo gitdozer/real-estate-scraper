@@ -4,6 +4,11 @@ Changes per component. Versions follow [SemVer](https://semver.org/), with tags 
 
 ## scraper
 
+### 0.2.1 — 2026-11-10
+- **The stop at the first 404 now stops the requests already waiting their turn.** Every request of a 500-page chunk passed the "stopped?" check at once, before waiting for a connection and for the pace, so after the first 404 the following requests still went out; the phase of 2026-11-10 ended only because a timed-out request re-entered the loop. The check is repeated right before the request is sent.
+- The report on R2 lists the listings seen in today's search results whose detail page answered 404 (`gone_samples`: URL, reason, status, up to 20) and their 404 pages are kept with the raw pages: that 404 is what stops the detail phase, and nothing else said which listings cause it.
+- First two runs with the 0.1.8/0.1.9 rules (11-09, 11-10): search results complete on both days and written; details 4,602 then a burst of 503s opened the circuit (11-09); details stopped at a 404 after 44 pages, photos all done, 3,566 `delisted` recorded (11-10). Notes in `docs/sources/trovacasa.md` and `docs/runbook.md`.
+
 ### 0.2.0 — 2026-11-08
 - **The project is now entirely in English**: code comments, docstrings, log messages, CLI help, the GitHub job summary, workflow names, configuration comments and documentation (the docs were translated earlier, in commit 895035a). Italian remains only where it is data or text read from the site (`vendita`, `affitto`, detail-page labels, quoted page text).
 - Log phase tags are now `[start]`, `[lists]`, `[details]`, `[photos]`, `[checks]`, `[write]`; the heartbeat reads "in progress".

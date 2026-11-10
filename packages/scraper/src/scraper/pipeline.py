@@ -46,7 +46,8 @@ log = logging.getLogger(__name__)
 STATE_KEY = "state/listings.parquet"
 SEGMENTS_KEY = "state/segments.parquet"
 CENSOR_WINDOW_DAYS = 7  # "new" listings in a segment's first days: probably already online before
-RAW_GONE_SAMPLES = 50  # 404/redirect check pages kept to learn how the site shows a removed listing
+RAW_GONE_SAMPLES = 50  # 404/redirect pages kept (checks and incidental 404s) to learn how the site shows a removed listing
+GONE_SAMPLES = 20  # incidental 404s (listings seen in today's search results) listed in the report, with their reason
 DETAIL_SHARE = 0.75  # details stop here, leaving photos at least 15% of the runtime (they had ~5%, 2026-11-01)
 PHOTO_SHARE = 0.90  # photos stop here; the rest is for writing
 HEARTBEAT_S = 60.0  # heartbeat interval during the network phases
@@ -415,6 +416,9 @@ async def _run_daily(
         dstats: Counter[str] = Counter()
         error_samples: list[dict] = []
         gone_samples = 0
+        # Which listings seen in today's search results answered 404, and why they were requested:
+        # one such 404 stops the detail phase (decision 0007), so the report on R2 keeps the evidence.
+        incidental_gone: list[dict] = []
 
         def keep_raw(raw: dict, r: FetchResult) -> None:
             # HTML compressed right away: ~15 KB per page in memory instead of ~170 KB
@@ -457,9 +461,11 @@ async def _run_daily(
                 dstats["gone"] += 1
                 if is_check:
                     checks[t.key] = "gone"
-                    if gone_samples < RAW_GONE_SAMPLES:
-                        gone_samples += 1
-                        keep_raw(raw, r)
+                elif len(incidental_gone) < GONE_SAMPLES:
+                    incidental_gone.append(dict(url=t.url, reason=t.reason, status=r.status))
+                if gone_samples < RAW_GONE_SAMPLES:
+                    gone_samples += 1
+                    keep_raw(raw, r)
             else:
                 dstats["errors"] += 1
                 if is_check:
@@ -585,6 +591,7 @@ async def _run_daily(
         fetch=dict(lists=site.stats, details=detail_site.stats, images=images.stats),
         alerts=alerts,
         error_samples=error_samples,
+        gone_samples=incidental_gone,
         exit_code=exit_code,
     )
     log.info("run %s: %s listings, events %s, warnings %s", run_date, len(cards), report["events"], alerts)
