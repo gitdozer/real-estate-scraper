@@ -406,7 +406,10 @@ async def _run_daily(
                 censor.add(s)
 
         # 3. detail pages
-        planned: list[DetailTask] = [] if circuit else plan_details(prev, cards, check_segments, settings, run_date)
+        # Bootstrap = segments with no listing in the state yet: there every listing is new and
+        # its detail page is requested the same day (otherwise from the next day, decision 0009).
+        bootstrap = set(segments) - {s.segment for s in prev.values()}
+        planned: list[DetailTask] = [] if circuit else plan_details(prev, cards, check_segments, settings, run_date, bootstrap)
         # The checks of absent listings answer 404: only a sample, after the photos (decision 0007).
         tasks, check_tasks = split_checks(planned, settings.absence_checks_per_run)
         detail_deadline = t0 + DETAIL_SHARE * settings.max_runtime_minutes * 60

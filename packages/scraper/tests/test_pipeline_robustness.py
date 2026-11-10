@@ -332,13 +332,14 @@ async def test_detail_404_stops_the_detail_phase_but_not_the_photos_and_removes_
     # Decision 0007: one 404 from a GitHub runner leaves every following detail request hanging
     # for hours. The detail phase stops at the first 404, the photos (another host) and the
     # write still happen, and the listings whose detail was not read stay as they were.
-    await run(site, storage, D1)
-    site.listings[("milano", "vendita")].append("31")  # new listing...
-    site.dead.add("31")  # ...removed again before its detail page is requested
-    site.listings[("milano", "vendita")].remove("5")  # an absent listing: its check must not run before the photos
-    for i in ("1", "2"):
-        site.prices[i] = "100.000 &#x20AC;"  # changed listings queued after the new one
     settings = Settings(max_retries=1, absence_checks_per_run=0)
+    site.listings[("milano", "vendita")].insert(0, "31")
+    await run(site, storage, D1, settings=settings)
+    site.dead.add("31")  # removed before its detail page is requested again...
+    site.listings[("milano", "vendita")].remove("5")  # an absent listing: its check must not run before the photos
+    for i in ("31", "1", "2"):
+        site.prices[i] = "100.000 &#x20AC;"  # ...as a changed listing, queued before the other two
+    site.listings[("milano", "vendita")].append("32")  # a new listing: its photos are due today, its page tomorrow
     site.requests.clear()
     report = await run(site, storage, D2, settings=settings)
     assert "details_stopped_404" in report["alerts"] and report["exit_code"] == 0
@@ -349,11 +350,29 @@ async def test_detail_404_stops_the_detail_phase_but_not_the_photos_and_removes_
     assert not any(u.startswith(DETAIL_PREFIX) and u.rsplit("-", 1)[-1] == "5" for u in site.requests)
     # The report on R2 (private) says which listing answered 404 and why it was requested, and
     # the 404 page is kept with the raw pages: the only evidence to learn what these 404s are.
-    assert [(s["reason"], s["status"], s["url"].rsplit("-", 1)[-1]) for s in report["gone_samples"]] == [("new", 404, "31")]
+    assert [(s["reason"], s["status"], s["url"].rsplit("-", 1)[-1]) for s in report["gone_samples"]] == [("changed", 404, "31")]
     from scraper.storage import partition_key, read_parquet
 
     raw = read_parquet(storage, partition_key("raw", D2, "raw.parquet")).filter(pl.col("status") == 404)
-    assert raw.select("listing_id", "reason", "status").rows() == [("31", "new", 404)]
+    assert raw.select("listing_id", "reason", "status").rows() == [("31", "changed", 404)]
+
+
+async def test_detail_page_of_a_new_listing_is_requested_the_day_after_it_appears(site, storage):
+    # Decision 0009 (run of 2026-11-10): listings inserted a few hours earlier are already in the
+    # search results while their detail page still answers 404, and one 404 stops the phase.
+    await run(site, storage, D1)
+    site.listings[("milano", "vendita")].append("31")
+    site.requests.clear()
+    report = await run(site, storage, D2)
+    assert [t for i, t in events(storage, D2) if i == "31"] == ["new"]
+    assert not any(u.startswith(DETAIL_PREFIX) and u.rsplit("-", 1)[-1] == "31" for u in site.requests)
+    assert report["details"]["planned"].get("new", 0) == 0 and st(storage)[("trovacasa", "31")].last_detail_date is None
+    assert report["photos"]["planned"] > 0  # the photos (another host) are taken on the first day
+    site.requests.clear()
+    report = await run(site, storage, D3)
+    # within the segment's censor window (7 days) the listing counts as "never_detailed", not "new"
+    assert report["details"]["planned"]["never_detailed"] == 1 and st(storage)[("trovacasa", "31")].last_detail_date == D3
+    assert any(u.startswith(DETAIL_PREFIX) and u.rsplit("-", 1)[-1] == "31" for u in site.requests)
 
 
 async def test_listing_absent_from_two_complete_collections_is_delisted_without_a_detail_check(site, storage):

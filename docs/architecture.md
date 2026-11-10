@@ -74,9 +74,9 @@ Code: `planner.py`. Each listing gets at most one detail download, tagged with i
 | Priority | Reason | When |
 |---|---|---|
 | 1 | `absence_check` | an active listing missing from today's search results, **only in segments that were collected and are complete** (in any other segment the result would be thrown away). **Since 0.1.8 these checks leave the detail queue**: a missing listing answers 404 and one 404 puts the runner IP in penalty for hours (decision 0007); only `absence_checks_per_run` of them (default 1) are requested, after the photos |
-| 2 | `new` | a listing never seen before, or one that has reappeared |
+| 2 | `new` | the first detail page of a listing seen on a previous day (not `first_seen_censored`), or one that has reappeared. **A listing on its first day in the search results gets no detail page** (decision 0009): a listing inserted a few hours earlier is listed while its page still answers 404, and one 404 stops the phase. Exception: bootstrap (a segment with no listing in the state yet) |
 | 3 | `changed` | the listing card's fingerprint has changed (price, floor area, photos, …) |
-| 4 | `never_detailed` | the detail page has never been downloaded (e.g. a previous run was interrupted) |
+| 4 | `never_detailed` | the detail page has never been downloaded, for a listing marked `first_seen_censored` (online at bootstrap, or seen in the segment's first 7 days) |
 | 5 | `delisted_recheck` | a `delisted` listing, re-checked every 7 days until it returns 404 (same treatment as `absence_check` since 0.1.8; it comes after the absence checks for the daily sample, so the 404 confirmation may take long — `delisted` is already the disappearance, decision 0008) |
 | 6 | `rotation` | periodic refresh: each listing has its own **fixed day** in the 7-day cycle (ID modulo 7), or its detail is at least 14 days old |
 | 7 | `full` | only with `full_details: true` (all listings, every day) |

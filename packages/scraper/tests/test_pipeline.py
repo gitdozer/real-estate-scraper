@@ -61,7 +61,7 @@ async def test_pipeline_day1_bootstrap_all_new_and_censored(site, storage):
     state = st(storage)
     assert len(state) == 30 and all(s.status == "active" and s.first_seen_censored for s in state.values())
     assert sorted(t for _, t in events(storage, D1)) == ["new"] * 30
-    assert len(read_parquet(storage, partition_key("details", D1))) == 30
+    assert len(read_parquet(storage, partition_key("details", D1))) == 30  # at bootstrap: the same day
     assert all(s.last_detail_date == D1 for s in state.values())
     photos = read_parquet(storage, partition_key("photos", D1))
     assert len(photos) == 60 and photos["phash"].str.len_chars().unique().to_list() == [16]

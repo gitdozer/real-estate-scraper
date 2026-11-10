@@ -65,7 +65,8 @@ async def test_first_live_run_after_legacy(tmp_path):
     state = load_state(s)
     assert state[("trovacasa", "2")].list_last_seen == date(2026, 10, 17)
     assert state[("trovacasa", "77")].first_seen_censored is True  # the segment's first complete run
-    assert all(state[("trovacasa", k)].last_detail_date == day for k in ("1", "4", "5", "77"))
+    assert all(state[("trovacasa", k)].last_detail_date == day for k in ("1", "4", "5"))
+    assert state[("trovacasa", "77")].last_detail_date is None  # first day in the search results (decision 0009)
 
 
 def test_import_legacy_refuses_after_live_runs_even_with_force(tmp_path):

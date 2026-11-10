@@ -38,3 +38,4 @@ Our own data also says that the list evidence is reliable on its own: in those t
 - The daily run writes search results **and** detail pages again from the first 0.1.8 run (to be verified on 2026-11-09).
 - `removed` events are limited to one per run until the follow-up lands; the backlog of absent listings is not lost (they stay `active` and are re-planned every day).
 - The probe gained `--dead-first` and `--dead-every` to reproduce the trigger; never run them against the production runner's day (a penalised IP stays penalised for hours).
+- **2026-11-10:** the first incidental 404s were listings inserted a few hours earlier, listed before their page was published: [decision 0009](0009-no-detail-page-on-the-first-day.md) defers the detail page of a new listing to the next day.

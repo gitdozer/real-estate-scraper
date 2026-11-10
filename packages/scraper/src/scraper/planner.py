@@ -48,10 +48,12 @@ def _rotation_due(st: ListingState, run_date: date, days: int) -> bool:
 def _card_reason(prev: ListingState | None, card: Card, settings: Settings, run_date: date) -> str | None:
     if prev is None or prev.status != "active":
         return "new"
+    if prev.last_detail_date is None and not prev.first_seen_censored:
+        return "new"  # first detail page of a listing that appeared after bootstrap
     if prev.last_fingerprint != card_fingerprint(card):
         return "changed"
     if prev.last_detail_date is None:
-        return "never_detailed"
+        return "never_detailed"  # online at bootstrap, detail page still to be read
     if _rotation_due(prev, run_date, settings.rotation_days):
         return "rotation"
     if settings.full_details:
@@ -65,14 +67,22 @@ def plan_details(
     check_segments: set[SegmentKey],
     settings: Settings,
     run_date: date,
+    bootstrap_segments: set[SegmentKey] = frozenset(),
 ) -> list[DetailTask]:
     """`check_segments`: segments collected AND complete today. Only there are absence checks
-    useful: in the others `reconcile` would discard their result anyway."""
+    useful: in the others `reconcile` would discard their result anyway.
+    `bootstrap_segments`: segments collected for the first time, where every listing is new."""
     tasks: list[DetailTask] = []
 
     for key, card in cards.items():
         if not classify(card)[0]:
             continue  # out of scope: no detail page
+        if key not in prev and card.segment not in bootstrap_segments:
+            # First day in the search results: no detail page (decision 0009). A listing inserted
+            # a few hours earlier is already listed while its page still answers 404, and one 404
+            # stops the detail phase (decision 0007). Its page is requested from the next day.
+            # Not at bootstrap, where every listing is new and almost all have been online for long.
+            continue
         reason = _card_reason(prev.get(key), card, settings, run_date)
         if reason:
             tasks.append(DetailTask(key, card.url, reason))

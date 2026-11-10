@@ -4,6 +4,10 @@ Changes per component. Versions follow [SemVer](https://semver.org/), with tags 
 
 ## scraper
 
+### 0.2.2 — 2026-11-10
+- **No detail page on the day a listing first appears in the search results** (decision 0009). The three 404s that stopped the detail phase on 2026-11-10 were private listings inserted a few hours earlier: already listed (at the end of the results), their page not published yet (online by the evening). The page is requested from the next day, if the listing is still listed; photos are still taken on the first day. At bootstrap (a segment with no listing in the state yet) every listing is new and its page is requested the same day, as before.
+- Detail priorities: `new` is now the first detail page of a listing that appeared after its segment's censor window (even if its card changed in the meantime); `never_detailed` stays for the listings marked `first_seen_censored`.
+
 ### 0.2.1 — 2026-11-10
 - **The stop at the first 404 now stops the requests already waiting their turn.** Every request of a 500-page chunk passed the "stopped?" check at once, before waiting for a connection and for the pace, so after the first 404 the following requests still went out; the phase of 2026-11-10 ended only because a timed-out request re-entered the loop. The check is repeated right before the request is sent.
 - The report on R2 lists the listings seen in today's search results whose detail page answered 404 (`gone_samples`: URL, reason, status, up to 20) and their 404 pages are kept with the raw pages: that 404 is what stops the detail phase, and nothing else said which listings cause it.

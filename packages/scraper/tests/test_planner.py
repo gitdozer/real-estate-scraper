@@ -15,8 +15,8 @@ def reasons(tasks):
     return {t.key[1]: t.reason for t in tasks}
 
 
-def plan(prev=(), cards=(), scraped=(SEG,), settings=S, day=DAY):
-    return plan_details(by_key(*prev), by_key(*cards), set(scraped), settings, day)
+def plan(prev=(), cards=(), scraped=(SEG,), settings=S, day=DAY, bootstrap=()):
+    return plan_details(by_key(*prev), by_key(*cards), set(scraped), settings, day, set(bootstrap))
 
 
 def fresh(listing_id, **kw):
@@ -27,8 +27,25 @@ def fresh(listing_id, **kw):
     return state(listing_id, **base)
 
 
-def test_new_listing():
-    assert reasons(plan(cards=[card("1")])) == {"1": "new"}
+def test_first_day_in_the_search_results_gets_no_detail_page():
+    # Decision 0009: a listing inserted a few hours earlier is already in the search results
+    # while its detail page still answers 404 (2026-11-10), and one 404 stops the phase.
+    assert plan(cards=[card("1")]) == []
+
+
+def test_at_bootstrap_every_listing_is_new_and_its_detail_page_is_requested_the_same_day():
+    assert reasons(plan(cards=[card("1")], bootstrap=(SEG,))) == {"1": "new"}
+
+
+def test_known_listing_without_detail_page_is_new_from_the_second_day():
+    assert reasons(plan([fresh("1", last_detail_date=None)], [card("1")])) == {"1": "new"}
+    # ...even if its card changed in the meantime: the first detail page comes first
+    assert reasons(plan([fresh("1", last_detail_date=None)], [card("1", price=1)])) == {"1": "new"}
+
+
+def test_listing_online_at_bootstrap_without_detail_page_is_never_detailed():
+    prev = fresh("1", last_detail_date=None, first_seen_censored=True)
+    assert reasons(plan([prev], [card("1")])) == {"1": "never_detailed"}
 
 
 def test_reappeared_listing_counts_as_new():
@@ -40,7 +57,8 @@ def test_changed_fingerprint():
 
 
 def test_never_detailed():
-    assert reasons(plan([fresh("1", last_detail_date=None)], [card("1")])) == {"1": "never_detailed"}
+    prev = fresh("1", last_detail_date=None, first_seen_censored=True)  # online at bootstrap, page still to be read
+    assert reasons(plan([prev], [card("1")])) == {"1": "never_detailed"}
 
 
 def _id_not_due(day):
@@ -97,8 +115,9 @@ def test_out_of_scope_cards_get_no_detail():
 
 def test_plan_details_one_task_per_listing_highest_priority():
     s = Settings(full_details=True)
-    tasks = plan([fresh("1", last_detail_date=None)], [card("1", price=1), card("2")], settings=s)
-    assert reasons(tasks) == {"1": "changed", "2": "new"}
+    prev = [fresh("1", last_detail_date=None, first_seen_censored=True), fresh("2", last_detail_date=None)]
+    tasks = plan(prev, [card("1", price=1), card("2"), card("3")], settings=s)
+    assert reasons(tasks) == {"1": "changed", "2": "new"}  # "3" is on its first day: no detail page
     order = ["absence_check", "new", "changed", "never_detailed", "delisted_recheck", "rotation", "full"]
     assert [t.reason for t in tasks] == sorted((t.reason for t in tasks), key=order.index)
 
@@ -209,7 +228,8 @@ def test_split_checks_separates_and_caps_the_404_prone_tasks():
     from scraper.planner import split_checks
 
     due = fresh("3", status="delisted", last_check_date=DAY - timedelta(days=30))
-    tasks = plan([fresh("1"), fresh("2"), due, fresh("4", last_detail_date=None)], [card("4"), card("5")])
+    prev = [fresh("1"), fresh("2"), due, fresh("4", last_detail_date=None, first_seen_censored=True), fresh("5", last_detail_date=None)]
+    tasks = plan(prev, [card("4"), card("5")])
     assert reasons(tasks) == {"1": "absence_check", "2": "absence_check", "3": "delisted_recheck", "4": "never_detailed", "5": "new"}
     main, checks = split_checks(tasks, limit=2)
     assert reasons(main) == {"4": "never_detailed", "5": "new"}
