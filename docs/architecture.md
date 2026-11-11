@@ -106,6 +106,8 @@ For photos we only compute the perceptual fingerprint; the images themselves are
 8. **Writing** (unless `--dry-run`): copy of the starting state (this marks that a run happened today) → the day's partitions → new state → segment registry → report; then cleanup of `raw/` (90 days) and `state/history/` (30 days).
 9. **Exit status:** code 1 if any segment is incomplete, active listings dropped by more than 5%, there were too many detail-page errors, or the circuit breaker opened on the site.
 
+Past a phase deadline the requests not yet made are skipped at once, without waiting for a connection slot or for the pace (0.2.3): on 2026-11-11 the skips alone, paced at 4 per second, took longer than the time left and the job was cancelled before the write.
+
 The GitHub summary also reports the **HTTP status codes** received from the site (counts only): this is how we notice that we are being blocked (403).
 
 The logs contain only counts: the logs of the HTTP libraries (which would print URLs) are silenced, and an unexpected error prints only its type (the details go to `runs/crash/` in storage).

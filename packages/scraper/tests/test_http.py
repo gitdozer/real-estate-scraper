@@ -115,6 +115,17 @@ async def test_get_many_stops_at_deadline():
     assert results == [None, None]
 
 
+async def test_requests_past_the_deadline_are_skipped_without_waiting_for_the_pace():
+    # Run of 2026-11-11: after the photo deadline the 16,000 remaining photo requests were
+    # skipped one at a time at the configured pace (0.25 s each, over an hour) and GitHub
+    # cancelled the job before anything was written. A skip must cost nothing.
+    sleep = FakeSleep()
+    f = Fetcher(1, Settings(), rate_per_s=4.0, transport=httpx.MockTransport(sequence(httpx.Response(200))), sleep=sleep, clock=lambda: 100.0)
+    results = await f.get_many([f"https://www.trovacasa.it/p{i}" for i in range(50)], deadline=50.0)
+    assert results == [None] * 50
+    assert sleep.calls == [] and f.stats["requests"] == 0 and f.stats["in_flight"] == 0
+
+
 async def test_get_many_preserves_order():
     def handler(request):
         return httpx.Response(200, text=request.url.params["n"])

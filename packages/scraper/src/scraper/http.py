@@ -203,6 +203,13 @@ class Fetcher:
             if self._stopped is not None:
                 raise FetchStopped(url)
             retry_after: float | None = None
+            # Past the deadline nothing waits for a slot or for the pace: on 2026-11-11 the
+            # 16,000 photo requests left at the photo deadline were skipped one at a time at
+            # the configured pace (0.25 s each, over an hour) and GitHub cancelled the job.
+            if deadline is not None and self._clock() >= deadline:
+                if attempt == 1:
+                    return None
+                break
             async with self._slot():
                 await self._pace()
                 # Checked right before EVERY attempt, after waiting for a slot and for the pace:

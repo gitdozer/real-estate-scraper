@@ -4,6 +4,9 @@ Changes per component. Versions follow [SemVer](https://semver.org/), with tags 
 
 ## scraper
 
+### 0.2.3 — 2026-11-11
+- **Requests past a phase deadline are skipped at once.** They used to wait for a connection slot and for their turn in the pace before noticing the deadline: on 2026-11-11 the 16,000 photo requests left at the photo deadline were skipped at 4 per second (over an hour), GitHub cancelled the job at 350 minutes and nothing was written — after 1,731 search-result pages, ~9,930 detail pages (the most in one run so far) and 13,635 photos. The deadline is now checked before waiting as well.
+
 ### 0.2.2 — 2026-11-10
 - **No detail page on the day a listing first appears in the search results** (decision 0009). The three 404s that stopped the detail phase on 2026-11-10 were private listings inserted a few hours earlier: already listed (at the end of the results), their page not published yet (online by the evening). The page is requested from the next day, if the listing is still listed; photos are still taken on the first day. At bootstrap (a segment with no listing in the state yet) every listing is new and its page is requested the same day, as before.
 - Detail priorities: `new` is now the first detail page of a listing that appeared after its segment's censor window (even if its card changed in the meantime); `never_detailed` stays for the listings marked `first_seen_censored`.
