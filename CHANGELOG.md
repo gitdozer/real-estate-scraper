@@ -4,6 +4,9 @@ Changes per component. Versions follow [SemVer](https://semver.org/), with tags 
 
 ## scraper
 
+### Schedule suspended — 2026-11-14
+- The nightly `Daily collection` is suspended (the `schedule` trigger of `scrape.yml` is commented out; manual runs stay possible): since 2026-11-12 the site blocks the search results from GitHub's IPs after ~100–200 pages, or with a 403 from the first request (`docs/sources/trovacasa.md`). No code change.
+
 ### 0.2.3 — 2026-11-11
 - **Requests past a phase deadline are skipped at once.** They used to wait for a connection slot and for their turn in the pace before noticing the deadline: on 2026-11-11 the 16,000 photo requests left at the photo deadline were skipped at 4 per second (over an hour), GitHub cancelled the job at 350 minutes and nothing was written — after 1,731 search-result pages, ~9,930 detail pages (the most in one run so far) and 13,635 photos. The deadline is now checked before waiting as well.
 

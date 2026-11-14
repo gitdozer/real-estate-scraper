@@ -16,7 +16,7 @@ Run every command from the repository root.
 1. Create the repository (public, see [decisions/0003](decisions/0003-github-actions-r2.md)) and push the `main` branch.
 2. **Settings → Secrets and variables → Actions → New repository secret**, four secrets:
    `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`.
-3. The workflows live in `.github/workflows/`: `Test` (on every push) and `Daily collection` (every night at 02:17 UTC, plus manual trigger from **Actions → Daily collection → Run workflow**).
+3. The workflows live in `.github/workflows/`: `Test` (on every push) and `Daily collection` (every night at 02:17 UTC, plus manual trigger from **Actions → Daily collection → Run workflow**). **The schedule is suspended since 2026-11-14** (the `schedule` trigger is commented out in `scrape.yml`): trovacasa blocks the search results from GitHub's IPs since 2026-11-12 (see `docs/sources/trovacasa.md`). Manual runs still work; to resume the nightly collection, restore the `schedule` block.
 
 ### 3. First start (bootstrap)
 

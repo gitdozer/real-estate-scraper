@@ -5,8 +5,12 @@
 name: Daily collection
 
 on:
-  schedule:
-    - cron: "17 2 * * *"  # 02:17 UTC = Italian night; odd minute to avoid GitHub's load peaks
+  # Schedule SUSPENDED on 2026-11-14: since 2026-11-12 the site blocks the search results from
+  # GitHub's IPs (hanging requests after ~100-200 pages, or 403 from the first request), so a
+  # nightly run writes nothing useful (docs/sources/trovacasa.md). Manual runs stay possible.
+  # To resume, restore:
+  #   schedule:
+  #     - cron: "17 2 * * *"  # 02:17 UTC = Italian night; odd minute to avoid GitHub's load peaks
   workflow_dispatch:
     inputs:
       cities:
