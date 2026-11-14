@@ -1,9 +1,13 @@
-# Probes the site's rate limit as seen from GitHub's servers. Manual start only.
-# Uses no credentials and writes no data: measures how many search-result pages the site
-# returns at different rates (requests per second) and reports counts only. See docs/runbook.md.
+# Probes the site's rate limit as seen from GitHub's servers. Manual start, plus a
+# TEMPORARY nightly schedule for the map (GeoJSON) test decided on 2026-11-14 (remove it
+# once the test is read). Uses no credentials and writes no data: measures how many pages
+# the site returns at different rates (requests per second) and reports counts only.
+# See docs/runbook.md.
 name: Rate probe
 
 on:
+  schedule:
+    - cron: "30 23 * * *"  # TEMPORARY (2026-11-14): map test at night, kind geojson, one request every 10 s
   workflow_dispatch:
     inputs:
       phases:
@@ -11,9 +15,9 @@ on:
         type: string
         default: "0.5:45"
       kind:
-        description: "Pages to probe: list (search results) or detail"
+        description: "Pages to probe: list (search results), detail, or geojson (the map of every segment)"
         type: choice
-        options: [list, detail]
+        options: [list, detail, geojson]
         default: list
       concurrency:
         description: "Connections sharing the rate"
@@ -45,11 +49,12 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked --package scraper --no-dev
       - name: Probe
+        # A scheduled run has no inputs: it runs the map test (kind geojson at 0.1 req/s).
         env:
-          IN_PHASES: ${{ inputs.phases }}
-          IN_KIND: ${{ inputs.kind }}
-          IN_CONCURRENCY: ${{ inputs.concurrency }}
-          IN_FIRST_PAGE: ${{ inputs.first_page }}
-          IN_DEAD_FIRST: ${{ inputs.dead_first }}
-          IN_DEAD_EVERY: ${{ inputs.dead_every }}
+          IN_PHASES: ${{ inputs.phases || '0.1:10' }}
+          IN_KIND: ${{ inputs.kind || 'geojson' }}
+          IN_CONCURRENCY: ${{ inputs.concurrency || '1' }}
+          IN_FIRST_PAGE: ${{ inputs.first_page || '1' }}
+          IN_DEAD_FIRST: ${{ inputs.dead_first || '0' }}
+          IN_DEAD_EVERY: ${{ inputs.dead_every || '0' }}
         run: uv run --no-dev python -m scraper probe --phases "$IN_PHASES" --kind "$IN_KIND" --concurrency "$IN_CONCURRENCY" --first-page "$IN_FIRST_PAGE" --dead-first "$IN_DEAD_FIRST" --dead-every "$IN_DEAD_EVERY"

@@ -86,6 +86,31 @@ def test_probe_detail_kind_harvests_urls_then_probes_them(monkeypatch, capsys):
     assert "detail pages, 2 connection(s)" in capsys.readouterr().out
 
 
+def test_probe_geojson_kind_probes_every_configured_segment_and_prints_counts_only(monkeypatch, capsys):
+    import scraper.probe as probe
+
+    seen = {}
+
+    async def fake_geojson(segments, settings, interval_s=10.0, **kw):
+        seen["segments"] = segments
+        seen["interval_s"] = interval_s
+        return [
+            dict(city=c, contract=k, outcome="ok", status=200, bytes=12_000_000, content_type="application/json", latency_s=3.2,
+                 features=16129, with_id=16129, with_coordinates=16129, declared=17470, coverage=0.923,
+                 property_keys=["id", "prezzodescr"], geometry_types=["Point"])
+            for c, k in segments
+        ]
+
+    monkeypatch.setattr(probe, "probe_geojson", fake_geojson)
+    monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
+    assert main(["probe", "--kind", "geojson", "--phases", "0.1:5"]) == 0
+    assert len(seen["segments"]) == 16 and ("milano", "vendita") in seen["segments"] and ("castellanza", "affitto") in seen["segments"]
+    assert seen["interval_s"] == 10.0  # one request every 1/rate seconds of the first phase
+    out = capsys.readouterr().out
+    assert "## Map (GeoJSON) probe" in out and "| milano | vendita | ok | 200 |" in out and "92.3%" in out
+    assert "id, prezzodescr" in out and "Point" in out
+
+
 def test_probe_detail_kind_can_start_with_requests_for_missing_listings(monkeypatch):
     # Reproduces the daily run's detail phase, which starts with absence checks (404s):
     # `--dead-first N` puts N detail URLs with non-existent ids before the harvested ones.

@@ -89,7 +89,9 @@ The search-results page has a map view that loads, in a single request, `GET /ri
 - per listing: `id` (same as our `listing_id`), coordinates (mostly 4 decimals), `prezzodescr`, `mqdescr`, `nrlocalidescr`, `tipodescr`, `titolo`, `urlanteprima` (cover photo) as display text; no address, bathrooms, energy class, agency or tags;
 - clicking a point calls `GET /immobile/json?idlist=<id>&codCache=<…>` (title, price, floor area, rooms, URLs).
 
-It could replace most of the search-result requests (1 request per segment instead of hundreds), but it **cannot be the basis for disappearances**: the ~8% of listings missing from the map would look gone every day. Kept as an option for later (decision of 2026-10-30); not implemented.
+It could replace most of the search-result requests (1 request per segment instead of hundreds), but it **cannot be the basis for disappearances** as it is: the ~8% of listings missing from the map would look gone every day (unless a listing's absence from the map is judged only against its own presence on the map the day before). Kept as an option for later (decision of 2026-10-30); not implemented.
+
+**2026-11-14:** with the search-result pages blocked from GitHub's IPs, the endpoint is being tested from GitHub with `probe --kind geojson` (0.2.4: one request per segment, then page 1 of each segment for the declared total; counts only in the summary). Results in the table of real runs below once read.
 
 ## Real pipeline test runs
 

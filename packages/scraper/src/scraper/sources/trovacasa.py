@@ -22,6 +22,12 @@ def list_url(city_slug: str, contract: str, page: int) -> str:
     return url if page == 1 else f"{url}?page={page}"
 
 
+def geojson_url(city_slug: str, contract: str) -> str:
+    """The map view of the search results: one GeoJSON with a point per listing (with
+    coordinates) for the whole search, in a single request. See docs/sources/trovacasa.md."""
+    return f"{BASE_URL}/ricerca/geojson?cacheKey=/case-in-{contract}/{city_slug}"
+
+
 def detail_url(path_or_id: str) -> str:
     return path_or_id if path_or_id.startswith("http") else f"{BASE_URL}{path_or_id}"
 

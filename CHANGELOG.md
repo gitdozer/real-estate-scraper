@@ -4,6 +4,9 @@ Changes per component. Versions follow [SemVer](https://semver.org/), with tags 
 
 ## scraper
 
+### 0.2.4 — 2026-11-14
+- **Map (GeoJSON) probe**: `probe --kind geojson` asks the map endpoint of the search results (`/ricerca/geojson?cacheKey=/case-in-<contract>/<city>`, the whole search in one request) for every configured segment, then page 1 of each segment for the declared total, and reports counts only: outcome, size, features, features with an id and with coordinates, property keys, coverage. First test from GitHub's IPs on the night of 2026-11-14 (temporary schedule of the `Rate probe` workflow at 23:30 UTC); if the map answers where the search-result pages are blocked, it is the candidate source of the daily lists (decision to follow).
+
 ### Schedule suspended — 2026-11-14
 - The nightly `Daily collection` is suspended (the `schedule` trigger of `scrape.yml` is commented out; manual runs stay possible): since 2026-11-12 the site blocks the search results from GitHub's IPs after ~100–200 pages, or with a 403 from the first request (`docs/sources/trovacasa.md`). No code change.
 

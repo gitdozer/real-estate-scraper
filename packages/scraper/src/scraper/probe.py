@@ -13,9 +13,14 @@ Two kinds of pages can be probed: search-result pages, and detail pages, whose U
 first harvested from a few search-result pages read slowly (`harvest_detail_urls`).
 The old scraper read detail pages at ~2.9 req/s with 4 connections without being
 stalled, while search-result pages stall above ~0.5 req/s: the limits may differ.
+
+A third kind asks the map endpoint of the search results (`probe_geojson`): since
+2026-11-12 the search-result pages are blocked from GitHub's IPs after ~100-200 pages,
+and the map returns the whole search in one request per segment.
 """
 
 import asyncio
+import json
 import logging
 import re
 import time
@@ -26,7 +31,7 @@ import httpx
 
 from scraper.config import Settings
 from scraper.http import BROWSER_HEADERS
-from scraper.sources.trovacasa import TROVACASA
+from scraper.sources.trovacasa import TROVACASA, geojson_url, list_url
 
 log = logging.getLogger(__name__)
 
@@ -117,6 +122,100 @@ async def run_probe(
             if exhausted:
                 break
     return results
+
+
+_JSON_HEADERS = {**BROWSER_HEADERS, "Accept": "application/json, text/plain, */*"}
+
+
+async def probe_geojson(
+    segments: list[tuple[str, str]],
+    settings: Settings,
+    transport: httpx.AsyncBaseTransport | None = None,
+    interval_s: float = 10.0,
+    clock: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+) -> list[dict]:
+    """Asks the map endpoint for every segment (city slug, contract), one request every
+    `interval_s` seconds, then page 1 of each segment's search results for the declared
+    total. Returns one row of counts per segment (no listing data): outcome, size, number
+    of features, how many carry an `id` and coordinates, the property keys, and the
+    coverage = features with an id / declared total."""
+    rows = [
+        dict(
+            city=city, contract=contract, outcome="", status=None, bytes=0, content_type="", latency_s=0.0,
+            features=0, with_id=0, with_coordinates=0, declared=None, coverage=None, property_keys=[], geometry_types=[],
+        )
+        for city, contract in segments
+    ]  # fmt: skip
+    next_start = clock()
+
+    async def paced_get(client: httpx.AsyncClient, url: str, headers: dict[str, str]) -> tuple[httpx.Response | None, str, float]:
+        """One request at the pace; returns (response or None, outcome, latency)."""
+        nonlocal next_start
+        if clock() < next_start:
+            await sleep(next_start - clock())
+        next_start = clock() + interval_s
+        started = clock()
+        try:
+            resp = await client.get(url, headers=headers)
+        except httpx.TimeoutException:
+            return None, "timeouts", clock() - started
+        except httpx.HTTPError as exc:
+            return None, type(exc).__name__, clock() - started
+        return resp, "ok" if resp.status_code == 200 else f"http_{resp.status_code}", clock() - started
+
+    async with httpx.AsyncClient(headers=BROWSER_HEADERS, timeout=settings.timeout_s, follow_redirects=True, transport=transport) as client:
+        for row in rows:
+            resp, outcome, latency = await paced_get(client, geojson_url(row["city"], row["contract"]), _JSON_HEADERS)
+            row.update(outcome=outcome, latency_s=round(latency, 2))
+            if resp is not None:
+                row.update(status=resp.status_code, bytes=len(resp.content), content_type=resp.headers.get("content-type", "").split(";")[0])
+            if outcome == "ok":
+                row.update(_describe_geojson(resp.content))
+            log.info(
+                "[probe] map %s %s: %s, %d bytes, %d features (%d with id, %d with coordinates) in %.1f s",
+                row["city"], row["contract"], row["outcome"], row["bytes"], row["features"], row["with_id"],
+                row["with_coordinates"], row["latency_s"],
+            )  # fmt: skip
+        for row in rows:
+            # The declared total of the segment, from page 1 of its search results (a page the
+            # site still serves: the block of 2026-11-12 starts after ~100 pages).
+            resp, outcome, _ = await paced_get(client, list_url(row["city"], row["contract"], 1), BROWSER_HEADERS)
+            if resp is not None and outcome == "ok":
+                try:
+                    row["declared"] = TROVACASA.parse_list_page(resp.text, row["city"], row["contract"], 1).declared_total
+                except Exception:  # unreadable page: the coverage stays unknown
+                    row["declared"] = None
+            if row["declared"] and row["outcome"] == "ok":
+                row["coverage"] = round(row["with_id"] / row["declared"], 3)
+            log.info("[probe] page 1 %s %s: %s, declared %s", row["city"], row["contract"], outcome, row["declared"])
+    return rows
+
+
+def _describe_geojson(body: bytes) -> dict:
+    """Counts over a GeoJSON body: no listing data leaves this function."""
+    try:
+        data = json.loads(body)
+        features = data["features"]
+        assert isinstance(features, list)
+    except Exception:
+        return dict(outcome="not_geojson")
+    keys: set[str] = set()
+    geometry: set[str] = set()
+    with_id = with_coords = 0
+    for f in features:
+        props = f.get("properties") or {}
+        keys.update(props)
+        if props.get("id") not in (None, ""):
+            with_id += 1
+        geom = f.get("geometry") or {}
+        if geom.get("coordinates"):
+            with_coords += 1
+            geometry.add(str(geom.get("type")))
+    return dict(
+        features=len(features), with_id=with_id, with_coordinates=with_coords,
+        property_keys=sorted(keys), geometry_types=sorted(geometry),
+    )  # fmt: skip
 
 
 _LISTING_ID = re.compile(r"^(.*-)(\d+)/?$")

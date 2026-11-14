@@ -81,11 +81,18 @@ def _cmd_import_legacy(args) -> int:
 
 
 def _cmd_probe(args) -> int:
-    from scraper.probe import harvest_detail_urls, interleave_missing_detail_urls, missing_detail_urls, run_probe
+    from scraper.probe import harvest_detail_urls, interleave_missing_detail_urls, missing_detail_urls, probe_geojson, run_probe
     from scraper.sources.trovacasa import list_url
 
     settings = load_settings(Path(args.config_dir) / "settings.yaml", {})
     phases = [(float(r), float(m)) for r, m in (p.split(":") for p in args.phases.split(","))]
+    if args.kind == "geojson":
+        # One map request per configured segment, then page 1 of each segment; the pace is
+        # the rate of the first phase (its minutes are ignored: 32 requests in all).
+        cities = load_cities(Path(args.config_dir) / "cities.yaml")
+        segments = [(c.slugs["trovacasa"], k) for c in cities for k in c.contracts]
+        rows = asyncio.run(probe_geojson(segments, settings, interval_s=1.0 / phases[0][0]))
+        return _print_summary(_geojson_summary(rows))
     if args.kind == "detail":
         # Detail URLs come from sale search-result pages read slowly (0.5 req/s, below their limit).
         pages = [list_url(args.city, "vendita", page) for page in range(1, args.harvest_pages + 1)]
@@ -107,11 +114,33 @@ def _cmd_probe(args) -> int:
     summary += "".join(
         f"| {p['rate']} | {p['minutes']:g} | {p['requests']} | {p['ok']} | {p['timeouts']} | {p['latency_avg_s']} |\n" for p in results
     )
+    return _print_summary(summary)
+
+
+def _print_summary(summary: str) -> int:
     print(summary)
     if os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:
             f.write(summary)
     return 0
+
+
+def _geojson_summary(rows: list[dict]) -> str:
+    """Counts per segment only (the repository is public): no ids, prices or coordinates."""
+    summary = "## Map (GeoJSON) probe\n\n"
+    summary += "| city | contract | outcome | status | KB | features | with id | with coordinates | declared | coverage | latency (s) |\n"
+    summary += "|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|\n"
+    for r in rows:
+        cov = "" if r["coverage"] is None else f"{r['coverage']:.1%}"
+        declared = "" if r["declared"] is None else r["declared"]
+        summary += (
+            f"| {r['city']} | {r['contract']} | {r['outcome']} | {r['status'] or ''} | {r['bytes'] // 1024} | {r['features']} "
+            f"| {r['with_id']} | {r['with_coordinates']} | {declared} | {cov} | {r['latency_s']} |\n"
+        )
+    keys = sorted({k for r in rows for k in r["property_keys"]})
+    geometry = sorted({g for r in rows for g in r["geometry_types"]})
+    summary += f"\nProperty keys: {', '.join(keys) or '-'}. Geometry types: {', '.join(geometry) or '-'}.\n"
+    return summary
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -137,7 +166,7 @@ def build_parser() -> argparse.ArgumentParser:
     probe = sub.add_parser("probe", help="probe: how many requests the site accepts at different rates")
     probe.add_argument("--city", default="milano", help="slug of the city whose search-result pages to use")
     probe.add_argument("--phases", default="0.5:45", help="comma-separated 'requests_per_second:minutes' phases")
-    probe.add_argument("--kind", choices=("list", "detail"), default="list", help="pages to probe: search results or detail pages")
+    probe.add_argument("--kind", choices=("list", "detail", "geojson"), default="list", help="pages to probe: search results, detail pages or the map (GeoJSON) of every segment")
     probe.add_argument("--concurrency", type=int, default=1, help="connections sharing the rate")
     probe.add_argument("--first-page", type=int, default=1, help="list kind: first search-result page to request")
     probe.add_argument("--harvest-pages", type=int, default=300, help="detail kind: search-result pages read to collect URLs (24 each)")

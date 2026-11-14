@@ -194,3 +194,88 @@ def test_interleave_missing_detail_urls_puts_one_missing_listing_every_n_valid_p
     mixed = interleave_missing_detail_urls(valid, every=3)
     assert [u.rsplit("-", 1)[1] for u in mixed] == ["1", "2", "3", "900000001", "4", "5", "6", "900000002", "7"]
     assert interleave_missing_detail_urls(valid, every=0) == valid
+
+
+def _geojson(features: list[dict]) -> str:
+    import json
+
+    return json.dumps({"type": "FeatureCollection", "features": features})
+
+
+def _feature(fid: int | None, coords: list[float] | None, **props) -> dict:
+    p = dict(props)
+    if fid is not None:
+        p["id"] = fid
+    return {"type": "Feature", "geometry": None if coords is None else {"type": "Point", "coordinates": coords}, "properties": p}
+
+
+async def test_probe_geojson_reports_counts_per_segment_and_coverage_against_page_1(caplog):
+    # 2026-11-14: the search results are blocked from GitHub's IPs; the map endpoint returns
+    # the whole search in one request. The probe asks it for every segment, then page 1 of
+    # the search results for the declared total, and reports counts only.
+    from fakesite import card_html, list_page_html
+    from scraper.probe import probe_geojson
+
+    caplog.set_level(logging.INFO, logger="scraper")
+    t = FakeTime()
+    seen: list[tuple[float, str, str]] = []
+
+    def handler(request):
+        seen.append((t.now, str(request.url), request.headers.get("accept", "")))
+        if request.url.path == "/ricerca/geojson":
+            if request.url.params["cacheKey"] == "/case-in-affitto/milano":
+                return httpx.Response(403, text="forbidden")
+            features = [
+                _feature(1, [9.19, 45.46], prezzodescr="100.000", tipodescr="Trilocale"),
+                _feature(2, [9.20, 45.47], prezzodescr="200.000"),
+                _feature(None, [9.21, 45.48], titolo="x"),
+                _feature(4, None, prezzodescr="300.000"),
+            ]
+            return httpx.Response(200, text=_geojson(features), headers={"content-type": "application/json"})
+        return httpx.Response(200, text=list_page_html([card_html("1")], declared_total=5))
+
+    rows = await probe_geojson(
+        [("milano", "vendita"), ("milano", "affitto")], Settings(), transport=httpx.MockTransport(handler),
+        interval_s=10.0, clock=t.clock, sleep=t.sleep,
+    )  # fmt: skip
+    # all map requests first (the question is whether the map answers), then page 1 of each segment
+    assert [u.split("trovacasa.it")[1] for _, u, _ in seen] == [
+        "/ricerca/geojson?cacheKey=/case-in-vendita/milano",
+        "/ricerca/geojson?cacheKey=/case-in-affitto/milano",
+        "/case-in-vendita/milano",
+        "/case-in-affitto/milano",
+    ]
+    assert [round(s) for s, _, _ in seen] == [0, 10, 20, 30]  # one request every interval_s
+    assert seen[0][2].startswith("application/json")  # the map is asked for JSON, the page for HTML
+    assert seen[2][2].startswith("text/html")
+    sale, rent = rows
+    assert sale["city"] == "milano" and sale["contract"] == "vendita" and sale["outcome"] == "ok"
+    assert sale["features"] == 4 and sale["with_id"] == 3 and sale["with_coordinates"] == 3
+    assert sale["declared"] == 5 and sale["coverage"] == 0.6  # features with an id / declared total
+    assert sale["bytes"] > 0 and sale["content_type"] == "application/json"
+    assert sale["property_keys"] == ["id", "prezzodescr", "tipodescr", "titolo"]
+    assert sale["geometry_types"] == ["Point"]
+    assert rent["outcome"] == "http_403" and rent["features"] == 0 and rent["declared"] == 5 and rent["coverage"] is None
+    text = "\n".join(r.getMessage() for r in caplog.records)
+    assert "[probe] map milano vendita: ok" in text and "9.19" not in text and "100.000" not in text
+
+
+async def test_probe_geojson_records_timeouts_and_unreadable_bodies_without_stopping():
+    from scraper.probe import probe_geojson
+
+    t = FakeTime()
+
+    def handler(request):
+        if request.url.path == "/ricerca/geojson":
+            if request.url.params["cacheKey"].endswith("/monza"):
+                raise httpx.ReadTimeout("slow", request=request)
+            return httpx.Response(200, text="<html>not json</html>", headers={"content-type": "text/html"})
+        raise httpx.ReadTimeout("slow", request=request)
+
+    rows = await probe_geojson(
+        [("monza", "vendita"), ("legnano", "vendita")], Settings(), transport=httpx.MockTransport(handler),
+        interval_s=1.0, clock=t.clock, sleep=t.sleep,
+    )  # fmt: skip
+    assert [r["outcome"] for r in rows] == ["timeouts", "not_geojson"]
+    assert rows[1]["content_type"] == "text/html" and rows[1]["features"] == 0
+    assert all(r["declared"] is None and r["coverage"] is None for r in rows)
