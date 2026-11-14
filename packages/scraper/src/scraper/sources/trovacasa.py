@@ -1,6 +1,7 @@
 """The trovacasa.it source: URLs and page parsing. Site structure in docs/sources/trovacasa.md."""
 
 import re
+from urllib.parse import quote
 
 from selectolax.lexbor import LexborHTMLParser as HTMLParser, LexborNode as Node
 
@@ -24,8 +25,9 @@ def list_url(city_slug: str, contract: str, page: int) -> str:
 
 def geojson_url(city_slug: str, contract: str) -> str:
     """The map view of the search results: one GeoJSON with a point per listing (with
-    coordinates) for the whole search, in a single request. See docs/sources/trovacasa.md."""
-    return f"{BASE_URL}/ricerca/geojson?cacheKey=/case-in-{contract}/{city_slug}"
+    coordinates) for the whole search, in a single request. See docs/sources/trovacasa.md.
+    The page's script sends the key with jQuery, which encodes the slashes."""
+    return f"{BASE_URL}/ricerca/geojson?cacheKey={quote(f'/case-in-{contract}/{city_slug}', safe='')}"
 
 
 def detail_url(path_or_id: str) -> str:

@@ -4,6 +4,9 @@ Changes per component. Versions follow [SemVer](https://semver.org/), with tags 
 
 ## scraper
 
+### 0.2.5 — 2026-11-14
+- **Map probe, second design.** The first run (43621007332, 17:25 UTC) asked the map first, without a session: one 503, then 401 with a 13 KB HTML page on the other 15 segments, while page 1 of every segment answered 200. The site's own page asks the map with jQuery after the page is loaded, so the probe now visits page 1 first (declared total, cookies) and asks the map with the same client, with the key encoded as jQuery sends it. The summary gains the number of cookies set by the site and the title of a non-JSON answer.
+
 ### 0.2.4 — 2026-11-14
 - **Map (GeoJSON) probe**: `probe --kind geojson` asks the map endpoint of the search results (`/ricerca/geojson?cacheKey=/case-in-<contract>/<city>`, the whole search in one request) for every configured segment, then page 1 of each segment for the declared total, and reports counts only: outcome, size, features, features with an id and with coordinates, property keys, coverage. First test from GitHub's IPs on the night of 2026-11-14 (temporary schedule of the `Rate probe` workflow at 23:30 UTC); if the map answers where the search-result pages are blocked, it is the candidate source of the daily lists (decision to follow).
 

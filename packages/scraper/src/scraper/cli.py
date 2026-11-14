@@ -87,8 +87,8 @@ def _cmd_probe(args) -> int:
     settings = load_settings(Path(args.config_dir) / "settings.yaml", {})
     phases = [(float(r), float(m)) for r, m in (p.split(":") for p in args.phases.split(","))]
     if args.kind == "geojson":
-        # One map request per configured segment, then page 1 of each segment; the pace is
-        # the rate of the first phase (its minutes are ignored: 32 requests in all).
+        # Page 1 then the map for every configured segment; the pace is the rate of the
+        # first phase (its minutes are ignored: 32 requests in all).
         cities = load_cities(Path(args.config_dir) / "cities.yaml")
         segments = [(c.slugs["trovacasa"], k) for c in cities for k in c.contracts]
         rows = asyncio.run(probe_geojson(segments, settings, interval_s=1.0 / phases[0][0]))
@@ -128,14 +128,14 @@ def _print_summary(summary: str) -> int:
 def _geojson_summary(rows: list[dict]) -> str:
     """Counts per segment only (the repository is public): no ids, prices or coordinates."""
     summary = "## Map (GeoJSON) probe\n\n"
-    summary += "| city | contract | outcome | status | KB | features | with id | with coordinates | declared | coverage | latency (s) |\n"
-    summary += "|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|\n"
+    summary += "| city | contract | outcome | status | cookies | KB | features | with id | with coordinates | declared | coverage | latency (s) | title |\n"
+    summary += "|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|\n"
     for r in rows:
         cov = "" if r["coverage"] is None else f"{r['coverage']:.1%}"
         declared = "" if r["declared"] is None else r["declared"]
         summary += (
-            f"| {r['city']} | {r['contract']} | {r['outcome']} | {r['status'] or ''} | {r['bytes'] // 1024} | {r['features']} "
-            f"| {r['with_id']} | {r['with_coordinates']} | {declared} | {cov} | {r['latency_s']} |\n"
+            f"| {r['city']} | {r['contract']} | {r['outcome']} | {r['status'] or ''} | {r['cookies']} | {r['bytes'] // 1024} "
+            f"| {r['features']} | {r['with_id']} | {r['with_coordinates']} | {declared} | {cov} | {r['latency_s']} | {r['title']} |\n"
         )
     keys = sorted({k for r in rows for k in r["property_keys"]})
     geometry = sorted({g for r in rows for g in r["geometry_types"]})

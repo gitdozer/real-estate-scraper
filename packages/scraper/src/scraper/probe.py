@@ -124,7 +124,11 @@ async def run_probe(
     return results
 
 
-_JSON_HEADERS = {**BROWSER_HEADERS, "Accept": "application/json, text/plain, */*"}
+# The site's own page asks the map with jQuery (`$.ajax({dataType: "json"})`) after the
+# search-results page is loaded (docs/sources/trovacasa.md). The first probe of 2026-11-14
+# asked the map first, without a session, and got 401 on every segment.
+_JSON_ACCEPT = "application/json, text/javascript, */*; q=0.01"
+_TITLE = re.compile(r"<title>\s*(.*?)\s*</title>", re.I | re.S)
 
 
 async def probe_geojson(
@@ -135,15 +139,18 @@ async def probe_geojson(
     clock: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
 ) -> list[dict]:
-    """Asks the map endpoint for every segment (city slug, contract), one request every
-    `interval_s` seconds, then page 1 of each segment's search results for the declared
-    total. Returns one row of counts per segment (no listing data): outcome, size, number
-    of features, how many carry an `id` and coordinates, the property keys, and the
-    coverage = features with an id / declared total."""
+    """For every segment (city slug, contract): page 1 of its search results (the declared
+    total, and the cookies the site sets), then the map endpoint with the same client
+    (its cookies, and the Accept header of a JSON request), one request every
+    `interval_s` seconds. Returns one row of counts per segment (no listing data):
+    outcome, size, number of features, how many carry an `id` and coordinates, the
+    property keys, the coverage = features with an id / declared total, and the title
+    of a non-JSON answer (an error page)."""
     rows = [
         dict(
             city=city, contract=contract, outcome="", status=None, bytes=0, content_type="", latency_s=0.0,
             features=0, with_id=0, with_coordinates=0, declared=None, coverage=None, property_keys=[], geometry_types=[],
+            cookies=0, title="",
         )
         for city, contract in segments
     ]  # fmt: skip
@@ -166,29 +173,32 @@ async def probe_geojson(
 
     async with httpx.AsyncClient(headers=BROWSER_HEADERS, timeout=settings.timeout_s, follow_redirects=True, transport=transport) as client:
         for row in rows:
-            resp, outcome, latency = await paced_get(client, geojson_url(row["city"], row["contract"]), _JSON_HEADERS)
-            row.update(outcome=outcome, latency_s=round(latency, 2))
-            if resp is not None:
-                row.update(status=resp.status_code, bytes=len(resp.content), content_type=resp.headers.get("content-type", "").split(";")[0])
-            if outcome == "ok":
-                row.update(_describe_geojson(resp.content))
-            log.info(
-                "[probe] map %s %s: %s, %d bytes, %d features (%d with id, %d with coordinates) in %.1f s",
-                row["city"], row["contract"], row["outcome"], row["bytes"], row["features"], row["with_id"],
-                row["with_coordinates"], row["latency_s"],
-            )  # fmt: skip
-        for row in rows:
-            # The declared total of the segment, from page 1 of its search results (a page the
-            # site still serves: the block of 2026-11-12 starts after ~100 pages).
-            resp, outcome, _ = await paced_get(client, list_url(row["city"], row["contract"], 1), BROWSER_HEADERS)
+            page_url = list_url(row["city"], row["contract"], 1)
+            resp, outcome, _ = await paced_get(client, page_url, BROWSER_HEADERS)
             if resp is not None and outcome == "ok":
                 try:
                     row["declared"] = TROVACASA.parse_list_page(resp.text, row["city"], row["contract"], 1).declared_total
                 except Exception:  # unreadable page: the coverage stays unknown
                     row["declared"] = None
+            row["cookies"] = len(client.cookies)
+            log.info("[probe] page 1 %s %s: %s, declared %s, cookies %d", row["city"], row["contract"], outcome, row["declared"], row["cookies"])
+
+            resp, outcome, latency = await paced_get(client, geojson_url(row["city"], row["contract"]), {"Accept": _JSON_ACCEPT})
+            row.update(outcome=outcome, latency_s=round(latency, 2))
+            if resp is not None:
+                row.update(status=resp.status_code, bytes=len(resp.content), content_type=resp.headers.get("content-type", "").split(";")[0])
+            if outcome == "ok":
+                row.update(_describe_geojson(resp.content))
+            if resp is not None and row["outcome"] != "ok":
+                m = _TITLE.search(resp.text[:20_000])  # the title of an error page says what the site objects to
+                row["title"] = (m.group(1) if m else "")[:60]
             if row["declared"] and row["outcome"] == "ok":
                 row["coverage"] = round(row["with_id"] / row["declared"], 3)
-            log.info("[probe] page 1 %s %s: %s, declared %s", row["city"], row["contract"], outcome, row["declared"])
+            log.info(
+                "[probe] map %s %s: %s, %d bytes, %d features (%d with id, %d with coordinates) in %.1f s%s",
+                row["city"], row["contract"], row["outcome"], row["bytes"], row["features"], row["with_id"],
+                row["with_coordinates"], row["latency_s"], f", title: {row['title']}" if row["title"] else "",
+            )  # fmt: skip
     return rows
 
 

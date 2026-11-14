@@ -209,22 +209,25 @@ def _feature(fid: int | None, coords: list[float] | None, **props) -> dict:
     return {"type": "Feature", "geometry": None if coords is None else {"type": "Point", "coordinates": coords}, "properties": p}
 
 
-async def test_probe_geojson_reports_counts_per_segment_and_coverage_against_page_1(caplog):
+async def test_probe_geojson_visits_page_1_first_then_asks_the_map_with_the_same_session(caplog):
     # 2026-11-14: the search results are blocked from GitHub's IPs; the map endpoint returns
-    # the whole search in one request. The probe asks it for every segment, then page 1 of
-    # the search results for the declared total, and reports counts only.
+    # the whole search in one request. The first probe (map first, no session) got 401 on
+    # every segment: the site's own page calls it with jQuery after the page is loaded, so
+    # the probe visits page 1 first (cookies, declared total) and asks the map with the
+    # same client, the key encoded as jQuery sends it.
     from fakesite import card_html, list_page_html
     from scraper.probe import probe_geojson
 
     caplog.set_level(logging.INFO, logger="scraper")
     t = FakeTime()
-    seen: list[tuple[float, str, str]] = []
+    seen: list[tuple[float, str, dict]] = []
 
     def handler(request):
-        seen.append((t.now, str(request.url), request.headers.get("accept", "")))
+        seen.append((t.now, str(request.url), dict(request.headers)))
         if request.url.path == "/ricerca/geojson":
-            if request.url.params["cacheKey"] == "/case-in-affitto/milano":
-                return httpx.Response(403, text="forbidden")
+            key = request.url.params["cacheKey"]
+            if key == "/case-in-affitto/milano" or "s=1" not in request.headers.get("cookie", ""):
+                return httpx.Response(401, text="<html><head><title>Accesso negato</title></head><body>no</body></html>")
             features = [
                 _feature(1, [9.19, 45.46], prezzodescr="100.000", tipodescr="Trilocale"),
                 _feature(2, [9.20, 45.47], prezzodescr="200.000"),
@@ -232,32 +235,32 @@ async def test_probe_geojson_reports_counts_per_segment_and_coverage_against_pag
                 _feature(4, None, prezzodescr="300.000"),
             ]
             return httpx.Response(200, text=_geojson(features), headers={"content-type": "application/json"})
-        return httpx.Response(200, text=list_page_html([card_html("1")], declared_total=5))
+        return httpx.Response(200, text=list_page_html([card_html("1")], declared_total=5), headers={"set-cookie": "s=1; Path=/"})
 
     rows = await probe_geojson(
         [("milano", "vendita"), ("milano", "affitto")], Settings(), transport=httpx.MockTransport(handler),
         interval_s=10.0, clock=t.clock, sleep=t.sleep,
     )  # fmt: skip
-    # all map requests first (the question is whether the map answers), then page 1 of each segment
     assert [u.split("trovacasa.it")[1] for _, u, _ in seen] == [
-        "/ricerca/geojson?cacheKey=/case-in-vendita/milano",
-        "/ricerca/geojson?cacheKey=/case-in-affitto/milano",
         "/case-in-vendita/milano",
+        "/ricerca/geojson?cacheKey=%2Fcase-in-vendita%2Fmilano",  # the key encoded as jQuery sends it
         "/case-in-affitto/milano",
+        "/ricerca/geojson?cacheKey=%2Fcase-in-affitto%2Fmilano",
     ]
     assert [round(s) for s, _, _ in seen] == [0, 10, 20, 30]  # one request every interval_s
-    assert seen[0][2].startswith("application/json")  # the map is asked for JSON, the page for HTML
-    assert seen[2][2].startswith("text/html")
+    h = [hd for _, _, hd in seen]
+    assert h[0]["accept"].startswith("text/html") and h[1]["accept"].startswith("application/json")
+    assert "referer" not in h[1] and "x-requested-with" not in h[1]  # the session's cookies only
     sale, rent = rows
-    assert sale["city"] == "milano" and sale["contract"] == "vendita" and sale["outcome"] == "ok"
+    assert sale["outcome"] == "ok" and sale["cookies"] == 1
     assert sale["features"] == 4 and sale["with_id"] == 3 and sale["with_coordinates"] == 3
     assert sale["declared"] == 5 and sale["coverage"] == 0.6  # features with an id / declared total
-    assert sale["bytes"] > 0 and sale["content_type"] == "application/json"
-    assert sale["property_keys"] == ["id", "prezzodescr", "tipodescr", "titolo"]
-    assert sale["geometry_types"] == ["Point"]
-    assert rent["outcome"] == "http_403" and rent["features"] == 0 and rent["declared"] == 5 and rent["coverage"] is None
+    assert sale["bytes"] > 0 and sale["content_type"] == "application/json" and sale["title"] == ""
+    assert sale["property_keys"] == ["id", "prezzodescr", "tipodescr", "titolo"] and sale["geometry_types"] == ["Point"]
+    assert rent["outcome"] == "http_401" and rent["title"] == "Accesso negato"
+    assert rent["features"] == 0 and rent["declared"] == 5 and rent["coverage"] is None
     text = "\n".join(r.getMessage() for r in caplog.records)
-    assert "[probe] map milano vendita: ok" in text and "9.19" not in text and "100.000" not in text
+    assert "[probe] map milano vendita: ok" in text and "9.19" not in text and "100.000" not in text and "s=1" not in text
 
 
 async def test_probe_geojson_records_timeouts_and_unreadable_bodies_without_stopping():
@@ -277,5 +280,5 @@ async def test_probe_geojson_records_timeouts_and_unreadable_bodies_without_stop
         interval_s=1.0, clock=t.clock, sleep=t.sleep,
     )  # fmt: skip
     assert [r["outcome"] for r in rows] == ["timeouts", "not_geojson"]
-    assert rows[1]["content_type"] == "text/html" and rows[1]["features"] == 0
-    assert all(r["declared"] is None and r["coverage"] is None for r in rows)
+    assert rows[1]["content_type"] == "text/html" and rows[1]["features"] == 0 and rows[1]["title"] == ""
+    assert all(r["declared"] is None and r["coverage"] is None and r["cookies"] == 0 for r in rows)

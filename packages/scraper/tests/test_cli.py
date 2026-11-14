@@ -97,7 +97,7 @@ def test_probe_geojson_kind_probes_every_configured_segment_and_prints_counts_on
         return [
             dict(city=c, contract=k, outcome="ok", status=200, bytes=12_000_000, content_type="application/json", latency_s=3.2,
                  features=16129, with_id=16129, with_coordinates=16129, declared=17470, coverage=0.923,
-                 property_keys=["id", "prezzodescr"], geometry_types=["Point"])
+                 property_keys=["id", "prezzodescr"], geometry_types=["Point"], cookies=2, title="")
             for c, k in segments
         ]
 
@@ -107,7 +107,7 @@ def test_probe_geojson_kind_probes_every_configured_segment_and_prints_counts_on
     assert len(seen["segments"]) == 16 and ("milano", "vendita") in seen["segments"] and ("castellanza", "affitto") in seen["segments"]
     assert seen["interval_s"] == 10.0  # one request every 1/rate seconds of the first phase
     out = capsys.readouterr().out
-    assert "## Map (GeoJSON) probe" in out and "| milano | vendita | ok | 200 |" in out and "92.3%" in out
+    assert "## Map (GeoJSON) probe" in out and "| milano | vendita | ok | 200 | 2 |" in out and "92.3%" in out
     assert "id, prezzodescr" in out and "Point" in out
 
 

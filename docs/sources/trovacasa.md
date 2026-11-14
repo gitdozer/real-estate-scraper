@@ -91,7 +91,7 @@ The search-results page has a map view that loads, in a single request, `GET /ri
 
 It could replace most of the search-result requests (1 request per segment instead of hundreds), but it **cannot be the basis for disappearances** as it is: the ~8% of listings missing from the map would look gone every day (unless a listing's absence from the map is judged only against its own presence on the map the day before). Kept as an option for later (decision of 2026-10-30); not implemented.
 
-**2026-11-14:** with the search-result pages blocked from GitHub's IPs, the endpoint is being tested from GitHub with `probe --kind geojson` (0.2.4: one request per segment, then page 1 of each segment for the declared total; counts only in the summary). Results in the table of real runs below once read.
+**2026-11-14:** with the search-result pages blocked from GitHub's IPs, the endpoint is being tested from GitHub with `probe --kind geojson` (0.2.4: one request per segment, then page 1 of each segment for the declared total; counts only in the summary). **First run (43621007332, 17:25 UTC, map first and no session): a 503 (27 bytes) on the first segment, then `401` with the same 13 KB HTML page on the other 15 segments; page 1 of all 16 segments answered 200.** The page's script asks the map with jQuery after the page is loaded (the session's cookies, the key with encoded slashes): since 0.2.5 the probe visits page 1 first and asks the map with the same client. Results in the table of real runs below once read.
 
 ## Real pipeline test runs
 
